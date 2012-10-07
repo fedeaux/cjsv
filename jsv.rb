@@ -1,3 +1,5 @@
+#!/usr/bin/ruby
+
 require 'rubygems'
 require 'listen'
 
@@ -8,10 +10,16 @@ class JSV
     @path = ''
 
     @opts = {
-      'output_generated_file' => true
+      'output_generated_file' => false,
+      'watch_directories' => true,
+      'debug' => false
     }
 
     @self_enclosed_tags = ['img', 'br', 'hr', 'input']
+  end
+
+  def watch?()
+    return @opts['watch_directories']
   end
 
   def tag(line)
@@ -73,7 +81,7 @@ class JSV
           @func_args = line.strip.gsub('(', '').gsub(')', '').gsub(' ', '').gsub(',', ', ')
 
         elsif(self.is_js line) then #Embedded JS Line
-          puts 'JS Line: '+line
+          puts 'JS Line: '+line if @opts['debug']
 
           @indentation_level.downto(@_indentation_level) do |i|
             html.push '  '*i+'</'+@stacks[i].pop+'>' if @stacks[i] != nil and @stacks[i].size > 0
@@ -86,11 +94,10 @@ class JSV
 
           html = []
         else #Indented HTML Line
-          puts 'HTML Line: '+line
+          puts 'HTML Line: '+line if @opts['debug']
 
           #Closes tags according to the current indentation level
           @indentation_level.downto(@_indentation_level) do |i|
-            puts i.to_s+' for '+line
             html.push '  '*i+'</'+@stacks[i].pop+'>' if @stacks[i] != nil and @stacks[i].size > 0
           end
 
@@ -287,7 +294,10 @@ end
 jsv = JSV.new()
 jsv.parse('_jsv')
 
-# Listen.to('.', :filter => /\.jsv$/) do |modified, added, removed|
-#   puts 'changed '+modified.join('/')+'/'+added.join('/')+'/'+removed.join('/')
-#   jsv.parse('_jsv')
-# end
+if jsv.watch? then
+  Listen.to('.', :filter => /\.jsv$/) do |modified, added, removed|
+    puts Time.now.strftime("%H:%M:%S")
+    puts 'changed '+modified.join('/')+'/'+added.join('/')+'/'+removed.join('/')
+    jsv.parse('_jsv')
+  end
+end
