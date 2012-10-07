@@ -10,10 +10,15 @@ class JSV
     @path = ''
 
     @opts = {
+      'debug' => false,
+      'input_dir' => 'js/_jsv/',
+      'output_dir' => 'js/',
+      'output_filename' => 'jsv.js',
       'output_generated_file' => false,
-      'watch_directories' => true,
-      'debug' => false
+      'watch_directories' => true
     }
+
+    @opts['output_path'] = @opts['output_dir']+$opts['output_filename']
 
     @self_enclosed_tags = ['img', 'br', 'hr', 'input']
   end
@@ -135,14 +140,14 @@ class JSV
     return line.scan(/^\s*/)[0].size/2
   end
   
-  def parse_file(file_name)
-    body = self.func_body(file_name)
+  def parse_file()
+    body = self.func_body(@opts['input_dir'])
     @func_args = '' if @func_args.nil?
     "#{file_name.split('.').first} : function(#{@func_args}) {\n  var _outstream='';\n  #{body}  return _outstream;\n},"
   end
 
   def parse(dir)
-    @f = File.new('jsv.js', 'w')
+    @f = File.new(@opts['output_path'], 'w')
 
     @f.puts "var JSV = {\n"
     @path = dir+'/'
@@ -163,7 +168,7 @@ class JSV
     @f.puts "}"
     @f.close
    
-    puts File.open('jsv.js', 'r').read if(@opts['output_generated_file'])
+    puts File.open(@opts['output_path'], 'r').read if(@opts['output_generated_file'])
   end
 
   def _parse(dir)
@@ -292,7 +297,7 @@ class JSV
 end
 
 jsv = JSV.new()
-jsv.parse('_jsv')
+jsv.parse()
 
 if jsv.watch? then
   Listen.to('.', :filter => /\.jsv$/) do |modified, added, removed|
