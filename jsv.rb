@@ -107,7 +107,6 @@ class JSV
           #If is a single line block, must force the generation of output
           if @is_single_line_block then
             parsed_html += self.outstream_block(html)
-            puts 'parsed_html: '+parsed_html
             html = []
             @is_single_line_block = false
           end
