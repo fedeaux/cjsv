@@ -15,10 +15,17 @@ class JSV
       'output_dir' => 'js/',
       'output_filename' => 'jsv.js',
       'output_generated_file' => false,
-      'watch_directories' => true
+      'watch_directories' => true,
+      'attributes_shorcuts' => {}
     }
 
-    @opts['output_path'] = @opts['output_dir']+$opts['output_filename']
+    @opts['output_path'] = @opts['output_dir']+@opts['output_filename']
+
+    if File.exist?('.jsv-config.rb') then
+      require '.jsv-config.rb'
+      puts "using .jsv-config"
+      @opts.merge!(preferences)
+    end
 
     @self_enclosed_tags = ['img', 'br', 'hr', 'input']
   end
@@ -56,7 +63,7 @@ class JSV
   end
 
   def outstream_block(html)
-    _html = html.join("\\\n").gsub('"', '\"').gsub('`', '"')
+    _html = "\\\n"+html.join("\\\n").gsub('"', '\"').gsub('`', '"')
 
     return '_outstream += "'+_html+'";'+"\n" if ! _html.empty?
     return ''
@@ -70,17 +77,32 @@ class JSV
   def is_single_line_block?(line)
     @is_single_line_block = ((line =~ /if|while|for/i).is_a? Numeric and not (line.include? '{'))
   end
-  
+
+  def parse_partial_request(line)
+    line .gsub /^\+load\s*/, '_outstream += JSV.'
+  end
+
+  def parse_js_line(line)
+    line = (line.gsub('@', '').strip)
+    
+    self.parse_partial_request(line)+"\n"
+  end
+
+  def is_comment_line? line
+    return line.strip[0..1] == '//'
+  end
+
   def func_body(file_name)
     html = []
     parsed_html = ''
 
     begin
       File.foreach(@path+file_name) do |line|
-        next if line.strip.empty?
+        #There are four types of line: Arguments Line, Embedded JS Line, Comments Line and Indented HTML Line
+
+        next if line.strip.empty? or is_comment_line? line
         @_indentation_level = self.line_identation line
 
-        #There are three types of line: Arguments Line, Embedded JS Line and Indented HTML Line
 
         if(self.is_argline? line ) then #Arguments Line
           @func_args = line.strip.gsub('(', '').gsub(')', '').gsub(' ', '').gsub(',', ', ')
@@ -93,7 +115,7 @@ class JSV
           end
           
           parsed_html += self.outstream_block(html) if(html.size > 0)
-          parsed_html += '  '*self.line_identation(line)+(line.gsub('@', '').strip)+"\n"
+          parsed_html += '  '*self.line_identation(line) + self.parse_js_line(line)
 
           is_single_line_block? line
 
@@ -140,17 +162,17 @@ class JSV
     return line.scan(/^\s*/)[0].size/2
   end
   
-  def parse_file()
-    body = self.func_body(@opts['input_dir'])
+  def parse_file(file_name)
+    body = self.func_body(file_name)
     @func_args = '' if @func_args.nil?
     "#{file_name.split('.').first} : function(#{@func_args}) {\n  var _outstream='';\n  #{body}  return _outstream;\n},"
   end
 
-  def parse(dir)
+  def parse()
     @f = File.new(@opts['output_path'], 'w')
 
     @f.puts "var JSV = {\n"
-    @path = dir+'/'
+    @path = @opts['input_dir']
 
     Dir.foreach(@path) do |item|
       next if item == '.' or item == '..'
@@ -231,6 +253,12 @@ class JSV
     return false
   end
 
+  def attributes_shortcuts()
+    if @opts['attributes_shortcuts'].has_key? @current_attribute then
+      @current_attribute = @opts['attributes_shortcuts'][@current_attribute]
+    end
+  end
+
   def state_changed()
     if @tokens[@state] == nil and ! ['attr_name', 'attr_value'].include? @state then
       @tokens[@state] = ''
@@ -242,6 +270,8 @@ class JSV
       end
       @current_attribute = ''
     elsif @state == 'attr_value' then
+      #Check for attributes_shortcuts
+      self.attributes_shortcuts()
       @tokens['attr'][@current_attribute] = '' if @tokens['attr'][@current_attribute] == nil
     end
 
@@ -303,6 +333,6 @@ if jsv.watch? then
   Listen.to('.', :filter => /\.jsv$/) do |modified, added, removed|
     puts Time.now.strftime("%H:%M:%S")
     puts 'changed '+modified.join('/')+'/'+added.join('/')+'/'+removed.join('/')
-    jsv.parse('_jsv')
+    jsv.parse()
   end
 end
