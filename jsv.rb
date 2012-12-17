@@ -1,4 +1,4 @@
-#!/usr/bin/ruby
+#!/Users/fedorius/.rvm/rubies/ruby-1.9.3-p0/bin/ruby
 
 require 'rubygems'
 require 'listen'
@@ -16,13 +16,14 @@ class JSV
       'output_filename' => 'jsv.js',
       'output_generated_file' => false,
       'watch_directories' => true,
-      'attributes_shorcuts' => {}
+      'attributes_shorcuts' => {},
+      'tags_shorcuts' => {}
     }
 
     @opts['output_path'] = @opts['output_dir']+@opts['output_filename']
 
     if File.exist?('.jsv-config.rb') then
-      require '.jsv-config.rb'
+      require './.jsv-config.rb'
       puts "using .jsv-config"
       @opts.merge!(preferences)
     end
@@ -39,8 +40,8 @@ class JSV
     self.tokenize(line)
 
     html = '  '*@_indentation_level+'<'+@tokens['tag']
-    html += ' id="'+@tokens['id']+'"' if @tokens['id'] != nil
-    html += ' class="'+@tokens['class']+'"' if @tokens['class'] != nil
+    html += ' id="'+@tokens['id'].strip+'"' if @tokens['id'] != nil
+    html += ' class="'+@tokens['class'].strip+'"' if @tokens['class'] != nil
 
     @tokens['attr'].each_pair do |k,v|
       k = 'data'+k if k[0].chr == '-'
@@ -254,8 +255,22 @@ class JSV
   end
 
   def attributes_shortcuts()
-    if @opts['attributes_shortcuts'].has_key? @current_attribute then
+    if not @opts['attributes_shortcuts'].nil? and @opts['attributes_shortcuts'].has_key? @current_attribute then
       @current_attribute = @opts['attributes_shortcuts'][@current_attribute]
+    end
+  end
+
+  def values_shortcuts()
+    value = @tokens['attr'][@current_attribute]
+    if not @opts['values_shortcuts'].nil? and @opts['values_shortcuts'].has_key? @current_attribute and @opts['values_shortcuts'][@current_attribute].has_key? value then
+      @tokens['attr'][@current_attribute] = @opts['values_shortcuts'][@current_attribute][value]
+    end
+  end
+
+  def tags_shortcuts()
+    if not @opts['tags_shortcuts'].nil? and @opts['tags_shortcuts'].has_key? @tokens['tag'] then
+      @tokens['attr'].merge!(@opts['tags_shortcuts'][@tokens['tag']]['attributes'])
+      @tokens['tag'] = @opts['tags_shortcuts'][@tokens['tag']]['tag']
     end
   end
 
@@ -264,12 +279,18 @@ class JSV
       @tokens[@state] = ''
     end
 
+    #Check for tags shortcuts
+    if @last_state == 'tag' then
+      self.tags_shortcuts()
+    end
+
+    if @last_state == 'attr_value'
+      self.values_shortcuts()
+    end
+
     if @state == 'attr_name' then
-      if @tokens['attr'] == nil then
-        @tokens['attr'] = {}
-      end
       @current_attribute = ''
-    elsif @state == 'attr_value' then
+    elsif @state == 'attr_value' or (@state == 'none' and @last_state == 'attr_name') then
       #Check for attributes_shortcuts
       self.attributes_shortcuts()
       @tokens['attr'][@current_attribute] = '' if @tokens['attr'][@current_attribute] == nil
@@ -283,7 +304,8 @@ class JSV
     @last_state = ''
     @current_attribute = ''
 
-    @tokens = { 'tag' => 'div' }
+    @tokens = { 'tag' => 'div',
+                'attr' => {}}
 
     line.split('').each do |c|
       @c = c
@@ -300,7 +322,6 @@ class JSV
         else
           @tokens[@state] += c
         end
-
       end
     end
 
