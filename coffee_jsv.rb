@@ -2,6 +2,7 @@
 
 require 'rubygems'
 require 'listen'
+require 'fileutils'
 
 class CJSV
   def initialize()
@@ -12,12 +13,16 @@ class CJSV
       'general' => -1,
       'aux_general' => 0,
       'input_coffee' => 0,
-      'output_coffee' => -1,
+      'output_coffee' => 0,
       'curr_html' => 0,
-      'last_seen_html' => 0
+      'last_seen_html' => 0,
+      'increased_coffe_on' => []
     }
+    @tag_count = {
+      'coffee_block' => {0 => 0}
+    }
+
     @path = ''
-    # @debug = true
 
     @opts = {
       'debug' => false,
@@ -28,7 +33,8 @@ class CJSV
       'output_generated_file' => false,
       'watch_directories' => true,
       'attributes_shorcuts' => {},
-      'tags_shorcuts' => {}
+      'tags_shorcuts' => {},
+      'optmizations' => [] #'shrink_blocks'
     }
 
     @opts['output_path'] = @opts['output_dir']+@opts['output_filename']
@@ -40,6 +46,46 @@ class CJSV
     end
 
     @self_enclosed_tags = ['img', 'br', 'hr', 'input']
+  end
+
+  def update_coffee_indentation(type=nil)
+    if type == 'close' then
+      @tag_count['coffee_block'][@indentation['output_coffee']] -= 1
+      # @parsed_html += "#close "+@indentation['output_coffee'].to_s+" -> "+@tag_count['coffee_block'][@indentation['output_coffee']].to_s+"\n"
+
+      if @tag_count['coffee_block'][@indentation['output_coffee']] == 0 then
+        @indentation['output_coffee'] -= 1
+      end
+
+      @indentation['output_coffee'] = 0 if @indentation['output_coffee'] < 0
+      return
+    elsif type == 'open' then
+      @tag_count['coffee_block'][@indentation['output_coffee']] += 1
+      # @parsed_html += "#open "+@indentation['output_coffee'].to_s+" ->  "+@tag_count['coffee_block'][@indentation['output_coffee']].to_s+"\n"
+      return
+    end
+
+    if self.must_increase_coffee_indentation then
+      # @parsed_html += "#increased\n"
+      @indentation['output_coffee'] += 1
+      @indentation['increased_coffe_on'] << @indentation['aux_general']
+      # puts @indentation['increased_coffe_on'].inspect
+
+      if @tag_count['coffee_block'][@indentation['output_coffee']].nil? then
+        @tag_count['coffee_block'][@indentation['output_coffee']] = 0
+      end
+
+    else
+      while @indentation['increased_coffe_on'].size > 0 and
+          @indentation['increased_coffe_on'][-1] > @indentation['aux_general'] + 1 do
+          # @parsed_html += "#decreased\n"
+          @indentation['increased_coffe_on'].pop
+          @indentation['output_coffee'] -= 1
+          @indentation['input_coffee'] = @indentation['aux_general']
+      end
+    end
+
+    @indentation['output_coffee'] = 0 if @indentation['output_coffee'] < 0
   end
 
   def get_helpers_file()
@@ -65,8 +111,10 @@ class CJSV
     end if @tokens['attr'] != nil
 
     if @self_enclosed_tags.include? @tokens['tag'] then
+      @is_self_enclosed_tag = true
       html += '/>'
     else
+      @is_self_enclosed_tag = false
       html += '>'
     end
 
@@ -135,7 +183,7 @@ class CJSV
     end
   end
 
-  def update_coffee_indentation(force = '')
+  def update_coffee_indentation2(force = '')
     if force == '__force_down__' then
       @indentation['output_coffee'] -= 1
       @indentation['output_coffee'] = 0 if @indentation['output_coffee'] < 0
@@ -171,7 +219,6 @@ class CJSV
         #There are four types of line: Arguments Line, Embedded JS Line, Comments Line and Indented HTML Line
         @previous_line = @line unless @line.empty?
         @line = line
-        puts @previous_line, "["+self.must_increase_coffee_indentation.to_s+"]" if /666/ =~ @line
 
         next if line.strip.empty? or is_comment_line? line
         @indentation['aux_general'] = self.line_identation line
@@ -182,13 +229,14 @@ class CJSV
 
         elsif(self.is_js line) then #Embedded JS Line
           puts 'JS Line: '+line if @opts['debug']
+          self.update_coffee_indentation
 
           @indentation['general'].downto(@indentation['aux_general']) do |i|
             if @stacks[i] != nil and @stacks[i].size > 0 then
               j = i - @indentation['aux_general']
               self.update_html_indentation
               @parsed_html += self.outstream_line('</'+@stacks[i].pop+'> # block 01')
-              self.update_coffee_indentation
+              self.update_coffee_indentation 'close'
             end
           end
 
@@ -202,14 +250,14 @@ class CJSV
           html = []
         else #Indented HTML Line
           puts 'HTML Line: '+line if @opts['debug']
+          self.update_coffee_indentation
 
           #Closes tags according to the current indentation level
           @indentation['general'].downto(@indentation['aux_general']) do |i|
             if @stacks[i] != nil and @stacks[i].size > 0 then
-              j = i - @indentation['aux_general']
-              @parsed_html += self.outstream_line('</'+@stacks[i].pop+'> # block 02')
-              self.update_coffee_indentation
               self.update_html_indentation
+              @parsed_html += self.outstream_line('</'+@stacks[i].pop+'> # block 02')
+              self.update_coffee_indentation 'close'
             end
           end
 
@@ -221,9 +269,7 @@ class CJSV
             @stacks[@indentation['aux_general']].push tag
           end
 
-          puts @previous_line, "["+self.must_increase_coffee_indentation.to_s+"]" if /666/ =~ @line
-
-          self.update_coffee_indentation
+          self.update_coffee_indentation 'open' unless @is_self_enclosed_tag
           self.update_html_indentation
           @parsed_html += self.outstream_line _html+" # block 03 "
 
@@ -240,7 +286,7 @@ class CJSV
       @indentation['general'].downto(0) do |i|
         if @stacks[i] != nil and @stacks[i].size > 0 then
           @parsed_html += self.outstream_line('</'+@stacks[i].pop+'>  # block 04')
-          self.update_coffee_indentation '__force_down__'
+          self.update_coffee_indentation 'close'
           self.update_html_indentation '__force_down__'
         end
       end
@@ -255,11 +301,11 @@ class CJSV
   end
 
   def parse_file(file_name)
-    @indentation['output_coffee'] = -1
+    @indentation['output_coffee'] = 0
 
     body = adjust_indentation self.func_body(file_name)
     @func_args = '' if @func_args.nil?
-    "#{file_name.split('.').first} : (#{@func_args}) -> \n  _outstream = ''\n#{body}"
+    "#{file_name.split('.').first} : (#{@func_args}) -> \n  _outstream = \"\"\n#{body}"
   end
 
   def parse()
@@ -285,7 +331,7 @@ class CJSV
     @f.puts self.adjust_indentation File.open(@opts['helpers_filename']).read
     @f.close
 
-    puts File.open(@opts['output_path'], 'r').read if(@opts['output_generated_file'])
+    #puts File.open(@opts['output_path'], 'r').read if(@opts['output_generated_file'])
   end
 
   def _parse(dir, level=1)
@@ -443,15 +489,70 @@ class CJSV
 
     @tokens['js'] = ''
   end
+
+  def optmize()
+    if @opts['optmizations'].include? 'shrink_blocks' then
+      self.optz_shrink_blocks
+    end
+  end
+
+  def is_outsream_line(line)
+    (line =~ /^\s*_outstream\s+(\+)?=.*"$/) == 0
+  end
+
+  def remove_outstream_line(line)
+    m = line.match(/^\s+_outstream\s+(\+)?=\s+\"/)[0]
+    line.gsub m, ' '*m.size
+  end
+
+  def remove_trailing_quote(line)
+    line.gsub /(.*)(")(.*)$/, '\1\3'
+  end
+
+  def optz_shrink_blocks()
+    path = @opts['output_dir']+@opts['output_filename']
+    prev_line = nil
+    write_line = nil
+    prev_is_outs = false
+    indents = []
+    FileUtils.copy path, path+'.tmp'
+    f = File.open path, 'w'
+
+    File.foreach path+'.tmp' do |line|
+      indents.push self.line_identation line
+
+      if self.is_outsream_line(line) then
+        if prev_is_outs and indents[-1] == indents[-2] then
+          write_line = self.remove_trailing_quote(prev_line)
+          prev_line = self.remove_outstream_line(line)
+        else
+          write_line = prev_line
+          prev_line = line
+        end
+        prev_is_outs = true
+      else
+        write_line = prev_line
+        prev_line = line
+        prev_is_outs = false
+      end
+
+      f.puts write_line if !write_line.nil?
+    end
+
+    f.close
+    File.delete path+'.tmp'
+  end
 end
 
-cjsv = CJSV.new()
-cjsv.parse()
+cjsv = CJSV.new
+cjsv.parse
+cjsv.optmize
 
 if cjsv.watch? then
   Listen.to('.', :filter => /\.cjsv$/) do |modified, added, removed|
     puts Time.now.strftime("%H:%M:%S")
     puts 'changed '+modified.join('/')+'/'+added.join('/')+'/'+removed.join('/')
-    cjsv.parse()
+    cjsv.parse
+    cjsv.optmize
   end
 end
