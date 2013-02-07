@@ -207,9 +207,9 @@ class CJSV
           @indentation['general'].downto(@indentation['aux_general']) do |i|
             if @stacks[i] != nil and @stacks[i].size > 0 then
               j = i - @indentation['aux_general']
-              self.update_html_indentation
               @parsed_html += self.outstream_line('</'+@stacks[i].pop+'> # block 02')
               self.update_coffee_indentation
+              self.update_html_indentation
             end
           end
 
@@ -239,8 +239,8 @@ class CJSV
 
       @indentation['general'].downto(0) do |i|
         if @stacks[i] != nil and @stacks[i].size > 0 then
-          self.update_coffee_indentation '__force_down__'
           @parsed_html += self.outstream_line('</'+@stacks[i].pop+'>  # block 04')
+          self.update_coffee_indentation '__force_down__'
           self.update_html_indentation '__force_down__'
         end
       end
