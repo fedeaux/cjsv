@@ -9,10 +9,12 @@ class CJSV
     @line = ''
     @stacks = Hash.new()
     @indentation = {
-      'html' => -1,
-      'aux_html' => 0,
+      'general' => -1,
+      'aux_general' => 0,
       'input_coffee' => 0,
-      'output_coffee' => -1
+      'output_coffee' => -1,
+      'curr_html' => 0,
+      'last_seen_html' => 0
     }
     @path = ''
     # @debug = true
@@ -111,7 +113,26 @@ class CJSV
   end
 
   def outstream_line(line)
-    _i(@indentation['output_coffee'])+'_outstream += "'+line.gsub('"', '\"').gsub('`', '"')+'"'+"\n"
+    line = _i(@indentation['curr_html'])+line.gsub('"', '\"').gsub('`', '"')+'"'+"\n"
+    _i(@indentation['output_coffee'])+'_outstream += "'+line
+  end
+
+  def update_html_indentation(force = '')
+    if force == '__force_down__' then
+      @indentation['curr_html'] -= 1
+      @indentation['curr_html'] = 0 if @indentation['curr_html'] < 0
+      return
+    end
+
+    if @indentation['aux_general'] > @indentation['curr_html'] and
+        @indentation['curr_html'] - @indentation['last_seen_html'] <= 1 then
+      @indentation['last_seen_html'] = @indentation['curr_html']
+      @indentation['curr_html'] += 1
+    elsif @indentation['aux_general'] < @indentation['curr_html'] and
+        @indentation['curr_html'] - @indentation['last_seen_html'] >= -1 then
+      @indentation['last_seen_html'] = @indentation['curr_html']
+      @indentation['curr_html'] -= 1
+    end
   end
 
   def update_coffee_indentation(force = '')
@@ -123,10 +144,10 @@ class CJSV
 
     if self.must_increase_coffee_indentation then
       @indentation['output_coffee'] += 1
-      @indentation['input_coffee'] = @indentation['aux_html']
-    elsif @indentation['input_coffee'] > @indentation['aux_html'] then
+      @indentation['input_coffee'] = @indentation['aux_general']
+    elsif @indentation['input_coffee'] > @indentation['aux_general'] then
       @indentation['output_coffee'] -= 1
-      @indentation['input_coffee'] = @indentation['aux_html']
+      @indentation['input_coffee'] = @indentation['aux_general']
     end
 
     @indentation['output_coffee'] = 0 if @indentation['output_coffee'] < 0
@@ -153,7 +174,7 @@ class CJSV
         puts @previous_line, "["+self.must_increase_coffee_indentation.to_s+"]" if /666/ =~ @line
 
         next if line.strip.empty? or is_comment_line? line
-        @indentation['aux_html'] = self.line_identation line
+        @indentation['aux_general'] = self.line_identation line
 
         if(self.is_argline? line ) then #Arguments Line
           @func_args = line.strip.gsub('(', '').gsub(')', '')
@@ -162,9 +183,10 @@ class CJSV
         elsif(self.is_js line) then #Embedded JS Line
           puts 'JS Line: '+line if @opts['debug']
 
-          @indentation['html'].downto(@indentation['aux_html']) do |i|
+          @indentation['general'].downto(@indentation['aux_general']) do |i|
             if @stacks[i] != nil and @stacks[i].size > 0 then
-              j = i - @indentation['aux_html']
+              j = i - @indentation['aux_general']
+              self.update_html_indentation
               @parsed_html += self.outstream_line('</'+@stacks[i].pop+'> # block 01')
               self.update_coffee_indentation
             end
@@ -182,9 +204,10 @@ class CJSV
           puts 'HTML Line: '+line if @opts['debug']
 
           #Closes tags according to the current indentation level
-          @indentation['html'].downto(@indentation['aux_html']) do |i|
+          @indentation['general'].downto(@indentation['aux_general']) do |i|
             if @stacks[i] != nil and @stacks[i].size > 0 then
-              j = i - @indentation['aux_html']
+              j = i - @indentation['aux_general']
+              self.update_html_indentation
               @parsed_html += self.outstream_line('</'+@stacks[i].pop+'> # block 02')
               self.update_coffee_indentation
             end
@@ -194,14 +217,15 @@ class CJSV
           tag, _html = self.tag(line)
 
           if not @self_enclosed_tags.include? tag then
-            @stacks[@indentation['aux_html']] = [] if(not @stacks.has_key?(@indentation['aux_html']))
-            @stacks[@indentation['aux_html']].push tag
+            @stacks[@indentation['aux_general']] = [] if(not @stacks.has_key?(@indentation['aux_general']))
+            @stacks[@indentation['aux_general']].push tag
           end
 
           puts @previous_line, "["+self.must_increase_coffee_indentation.to_s+"]" if /666/ =~ @line
 
           self.update_coffee_indentation
-          @parsed_html += self.outstream_line _html+" # block 03 "+_html
+          self.update_html_indentation
+          @parsed_html += self.outstream_line _html+" # block 03 "
 
           #If is a single line block, must force the generation of output
           if @is_single_line_block then
@@ -209,14 +233,15 @@ class CJSV
             @is_single_line_block = false
           end
 
-          @indentation['html'] = @indentation['aux_html']
+          @indentation['general'] = @indentation['aux_general']
         end
       end
 
-      @indentation['html'].downto(0) do |i|
+      @indentation['general'].downto(0) do |i|
         if @stacks[i] != nil and @stacks[i].size > 0 then
           self.update_coffee_indentation '__force_down__'
           @parsed_html += self.outstream_line('</'+@stacks[i].pop+'>  # block 04')
+          self.update_html_indentation '__force_down__'
         end
       end
 
