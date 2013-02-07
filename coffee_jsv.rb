@@ -34,7 +34,7 @@ class CJSV
       'watch_directories' => true,
       'attributes_shorcuts' => {},
       'tags_shorcuts' => {},
-      'optmizations' => [] #'shrink_blocks'
+      'optmizations' => ['delete_comments'] #'shrink_blocks',
     }
 
     @opts['output_path'] = @opts['output_dir']+@opts['output_filename']
@@ -48,40 +48,77 @@ class CJSV
     @self_enclosed_tags = ['img', 'br', 'hr', 'input']
   end
 
+  def _d(str)
+    @parsed_html += "#"+str+"\n"
+  end
+
   def update_coffee_indentation(type=nil)
+    _d "gogogo"
+
+    if type == 'close_all' then
+      if @tag_count['coffee_block'][@indentation['output_coffee']] == 0 then
+        _d "Closed all for "+@line
+        _d "no tag opened here!"
+        @indentation['output_coffee'] -= 1
+      end
+      return
+    end
+
     if type == 'close' then
       @tag_count['coffee_block'][@indentation['output_coffee']] -= 1
-      # @parsed_html += "#close "+@indentation['output_coffee'].to_s+" -> "+@tag_count['coffee_block'][@indentation['output_coffee']].to_s+"\n"
+
+      if @opts['debug'] or true
+        _d "close "+@indentation['output_coffee'].to_s+" -> "+@tag_count['coffee_block'][@indentation['output_coffee']].to_s
+      end
 
       if @tag_count['coffee_block'][@indentation['output_coffee']] == 0 then
-        @indentation['output_coffee'] -= 1
+        _d "close reached 0 with ["+@line
+        _d " -> "+@indentation['increased_coffe_on'].inspect+" "+@indentation['aux_general'].to_s
+
+        # It must only decrease if the current line has a identation larger
+        # or equal to the one that generated the block
+        if @indentation['increased_coffe_on'].size == 0 or
+            @indentation['increased_coffe_on'][-1] >= @indentation['aux_general'] then
+          @indentation['output_coffee'] -= 1
+        end
       end
 
       @indentation['output_coffee'] = 0 if @indentation['output_coffee'] < 0
       return
     elsif type == 'open' then
       @tag_count['coffee_block'][@indentation['output_coffee']] += 1
-      # @parsed_html += "#open "+@indentation['output_coffee'].to_s+" ->  "+@tag_count['coffee_block'][@indentation['output_coffee']].to_s+"\n"
+
+      if @opts['debug'] or true
+        @parsed_html += "#open "+@indentation['output_coffee'].to_s+" ->  "+@tag_count['coffee_block'][@indentation['output_coffee']].to_s+"\n"
+      end
+
       return
     end
 
     if self.must_increase_coffee_indentation then
-      # @parsed_html += "#increased\n"
+      if @opts['debug']
+        @parsed_html += "#increased\n"
+      end
+
+      @indentation['increased_coffe_on'] << self.line_identation(@previous_line)
       @indentation['output_coffee'] += 1
-      @indentation['increased_coffe_on'] << @indentation['aux_general']
-      # puts @indentation['increased_coffe_on'].inspect
+      #puts @indentation['increased_coffe_on'].inspect
 
       if @tag_count['coffee_block'][@indentation['output_coffee']].nil? then
         @tag_count['coffee_block'][@indentation['output_coffee']] = 0
       end
 
-    else
+    elsif type == 'js' then
       while @indentation['increased_coffe_on'].size > 0 and
-          @indentation['increased_coffe_on'][-1] > @indentation['aux_general'] + 1 do
-          # @parsed_html += "#decreased\n"
-          @indentation['increased_coffe_on'].pop
-          @indentation['output_coffee'] -= 1
-          @indentation['input_coffee'] = @indentation['aux_general']
+          @indentation['increased_coffe_on'][-1] >= @indentation['aux_general'] do
+
+        if @opts['debug']
+          @parsed_html += "#decreased\n"
+        end
+
+        @indentation['increased_coffe_on'].pop
+        @indentation['output_coffee'] -= 1
+        @indentation['input_coffee'] = @indentation['aux_general']
       end
     end
 
@@ -157,12 +194,16 @@ class CJSV
   end
 
   def is_comment_line? line
-    return line.strip[0..1] == '//'
+    return line.strip[0] == '#'
   end
 
-  def outstream_line(line)
-    line = _i(@indentation['curr_html'])+line.gsub('"', '\"').gsub('`', '"')+'"'+"\n"
-    _i(@indentation['output_coffee'])+'_outstream += "'+line
+  def outstream_line(line, comment = '')
+    unless comment.empty?
+      comment = '  #'+comment
+    end
+
+    line = _i(@indentation['curr_html'])+line.gsub('"', '\"').gsub('`', '"')+'"'
+    _i(@indentation['output_coffee'])+'_outstream += "'+line+comment+"\n"
   end
 
   def update_html_indentation(force = '')
@@ -181,24 +222,6 @@ class CJSV
       @indentation['last_seen_html'] = @indentation['curr_html']
       @indentation['curr_html'] -= 1
     end
-  end
-
-  def update_coffee_indentation2(force = '')
-    if force == '__force_down__' then
-      @indentation['output_coffee'] -= 1
-      @indentation['output_coffee'] = 0 if @indentation['output_coffee'] < 0
-      return
-    end
-
-    if self.must_increase_coffee_indentation then
-      @indentation['output_coffee'] += 1
-      @indentation['input_coffee'] = @indentation['aux_general']
-    elsif @indentation['input_coffee'] > @indentation['aux_general'] then
-      @indentation['output_coffee'] -= 1
-      @indentation['input_coffee'] = @indentation['aux_general']
-    end
-
-    @indentation['output_coffee'] = 0 if @indentation['output_coffee'] < 0
   end
 
   def _i(level, char = ' ')
@@ -229,16 +252,17 @@ class CJSV
 
         elsif(self.is_js line) then #Embedded JS Line
           puts 'JS Line: '+line if @opts['debug']
-          self.update_coffee_indentation
 
           @indentation['general'].downto(@indentation['aux_general']) do |i|
             if @stacks[i] != nil and @stacks[i].size > 0 then
               j = i - @indentation['aux_general']
               self.update_html_indentation
-              @parsed_html += self.outstream_line('</'+@stacks[i].pop+'> # block 01')
+              @parsed_html += self.outstream_line('</'+@stacks[i].pop+'>', 'block 01')
               self.update_coffee_indentation 'close'
             end
           end
+
+          self.update_coffee_indentation 'js'
 
           #Parse coffeescript
           parsed_js_line = self.parse_js_line(line)
@@ -256,7 +280,7 @@ class CJSV
           @indentation['general'].downto(@indentation['aux_general']) do |i|
             if @stacks[i] != nil and @stacks[i].size > 0 then
               self.update_html_indentation
-              @parsed_html += self.outstream_line('</'+@stacks[i].pop+'> # block 02')
+              @parsed_html += self.outstream_line('</'+@stacks[i].pop+'>', 'block 02')
               self.update_coffee_indentation 'close'
             end
           end
@@ -271,7 +295,7 @@ class CJSV
 
           self.update_coffee_indentation 'open' unless @is_self_enclosed_tag
           self.update_html_indentation
-          @parsed_html += self.outstream_line _html+" # block 03 "
+          @parsed_html += self.outstream_line _html, 'block 03'
 
           #If is a single line block, must force the generation of output
           if @is_single_line_block then
@@ -283,9 +307,11 @@ class CJSV
         end
       end
 
+      self.update_coffee_indentation 'close_all'
+      @indentation['aux_general'] = 0
       @indentation['general'].downto(0) do |i|
         if @stacks[i] != nil and @stacks[i].size > 0 then
-          @parsed_html += self.outstream_line('</'+@stacks[i].pop+'>  # block 04')
+          @parsed_html += self.outstream_line('</'+@stacks[i].pop+'>', 'block 04')
           self.update_coffee_indentation 'close'
           self.update_html_indentation '__force_down__'
         end
@@ -494,6 +520,10 @@ class CJSV
     if @opts['optmizations'].include? 'shrink_blocks' then
       self.optz_shrink_blocks
     end
+
+    if @opts['optmizations'].include? 'delete_comments' then
+      self.optz_delete_comments
+    end
   end
 
   def is_outsream_line(line)
@@ -537,6 +567,21 @@ class CJSV
       end
 
       f.puts write_line if !write_line.nil?
+    end
+
+    f.close
+    File.delete path+'.tmp'
+  end
+
+  def optz_delete_comments()
+    path = @opts['output_dir']+@opts['output_filename']
+    FileUtils.copy path, path+'.tmp'
+    f = File.open path, 'w'
+
+    File.foreach path+'.tmp' do |line|
+      unless is_comment_line? line
+        f.puts line
+      end
     end
 
     f.close
