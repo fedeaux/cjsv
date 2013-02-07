@@ -3,18 +3,20 @@
 require 'rubygems'
 require 'listen'
 
-class JSV
+class CJSV
   def initialize()
     @stacks = Hash.new()
     @indentation_level = -1
+    @cw_indentation_level = 0
     @path = ''
+    # @debug = true
 
     @opts = {
       'debug' => false,
-      'input_dir' => 'js/_jsv/',
-      'output_dir' => 'js/',
-      'output_filename' => 'jsv.js',
-      'helpers_filename' => File.dirname(__FILE__)+'/jsv_helpers.js',
+      'input_dir' => 'cjsv/',
+      'output_dir' => 'coffee/',
+      'output_filename' => 'jsv.coffee',
+      'helpers_filename' => File.dirname(__FILE__)+'/coffee_jsv_helpers.coffee',
       'output_generated_file' => false,
       'watch_directories' => true,
       'attributes_shorcuts' => {},
@@ -59,7 +61,7 @@ class JSV
       html += '>'
     end
 
-    html += "\\\n"+'  '*(@_indentation_level + 1)+@tokens['text'] if @tokens['text'] != nil
+    html += "\n"+'  '*(@_indentation_level + 1)+@tokens['text'] if @tokens['text'] != nil
 
     return @tokens['tag'], html
   end
@@ -69,9 +71,9 @@ class JSV
   end
 
   def outstream_block(html)
-    _html = "\\\n"+html.join("\\\n").gsub('"', '\"').gsub('`', '"')
+    _html = "\n"+html.join("\n").gsub('"', '\"').gsub('`', '"')
 
-    return '_outstream += "'+_html+'";'+"\n" if ! _html.empty?
+    return '||'*(@cw_indentation_level+1)+'_outstream += "'+_html+'"'+"\n" if ! _html.empty?
     return ''
   end
 
@@ -85,12 +87,17 @@ class JSV
   end
 
   def parse_partial_request(line)
-    line .gsub /^\+load\s*/, '_outstream += JSV.'
+    _line = line
+    if line.include? '+load ' then
+      _line .gsub! /^\+load\s*/, '_outstream += JSV.'
+      @parsed_partial_request = true
+    end
+    _line
   end
 
   def parse_js_line(line)
     line = (line.gsub('@', '').strip)
-    
+
     self.parse_partial_request(line)+"\n"
   end
 
@@ -119,9 +126,26 @@ class JSV
           @indentation_level.downto(@_indentation_level) do |i|
             html.push '  '*i+'</'+@stacks[i].pop+'>' if @stacks[i] != nil and @stacks[i].size > 0
           end
-          
+
           parsed_html += self.outstream_block(html) if(html.size > 0)
-          parsed_html += '  '*self.line_identation(line) + self.parse_js_line(line)
+
+          #Parse coffeescript
+          parsed_js_line = self.parse_js_line(line)
+
+          #Find js identation, we must disconsider one level for _load
+          cw_line_identation = self.line_identation(line)
+          # if(@parsed_partial_request) then
+          #   cw_line_identation -= 1
+          #   @parsed_partial_request = false
+          # end
+
+          if cw_line_identation > @cw_indentation_level then
+            @cw_indentation_level = @cw_indentation_level + 1
+          elsif cw_line_identation < @cw_indentation_level then
+            @cw_indentation_level = @cw_indentation_level - 1
+          end
+
+          parsed_html += '  '*@cw_indentation_level+parsed_js_line#'  '*con_indentation+parsed_js_line
 
           is_single_line_block? line
 
@@ -141,7 +165,7 @@ class JSV
             @stacks[@_indentation_level] = [] if(not @stacks.has_key?(@_indentation_level))
             @stacks[@_indentation_level].push tag
           end
-          
+
           html.push _html
 
           #If is a single line block, must force the generation of output
@@ -154,30 +178,31 @@ class JSV
           @indentation_level = @_indentation_level
         end
       end
-      
+
       @indentation_level.downto(0) do |i|
         html.push '  '*i+'</'+@stacks[i].pop+'>' if @stacks[i] != nil and @stacks[i].size > 0
       end
-      
+
       parsed_html += self.outstream_block(html)
     rescue SystemCallError
     end
   end
-  
+
   def line_identation(line)
     return line.scan(/^\s*/)[0].size/2
   end
-  
+
   def parse_file(file_name)
-    body = self.func_body(file_name)
+    @cw_indentation_level = 0
+    body = adjust_indentation self.func_body(file_name)
     @func_args = '' if @func_args.nil?
-    "#{file_name.split('.').first} : function(#{@func_args}) {\n  var _outstream='';\n  #{body}  return _outstream;\n},"
+    "#{file_name.split('.').first} : (#{@func_args}) -> \n  _outstream = ''\n#{body}_outstream\n"
   end
 
   def parse()
     @f = File.new(@opts['output_path'], 'w')
 
-    @f.puts "var JSV = {\n"
+    @f.puts "@JSV = \n"
     @path = @opts['input_dir']
 
     Dir.foreach(@path) do |item|
@@ -187,39 +212,43 @@ class JSV
         self._parse(item)
         @path.gsub!(item+'/', '')
 
-      elsif item.split('.').last == 'jsv'and not item.include? '#' then
+      elsif item.split('.').last == 'cjsv' and not item.include? '#' then
         func = self.parse_file(item)
-        @f.puts func
+        @f.puts '#adjust indentation parse()'
+        @f.puts self.adjust_indentation func
       end
     end
 
     #Add helper functions
-    @f.puts File.open(@opts['helpers_filename']).read
-
-    @f.puts "}"
+    @f.puts self.adjust_indentation File.open(@opts['helpers_filename']).read
     @f.close
-   
+
     puts File.open(@opts['output_path'], 'r').read if(@opts['output_generated_file'])
   end
 
-  def _parse(dir)
-    @f.puts dir+" : {\n"
+  def _parse(dir, level=1)
+    @f.puts '  '*level+dir+" : \n"
     @path += dir+'/'
 
     Dir.foreach(@path) do |item|
       next if item == '.' or item == '..'
 
       if File.directory? @path+item then
-        self._parse(item)
+        self._parse(item, level+1)
         @path.gsub!(item+'/', '')
 
-      elsif item.split('.').last == 'jsv' then
+      elsif item.split('.').last == 'cjsv' then
         func = self.parse_file(item)
-        @f.puts func
+        @f.puts '#adjust indentation _parse()'
+        @f.puts self.adjust_indentation(func, level+1)
       end
     end
+  end
 
-    @f.puts "},"
+  def adjust_indentation(code_block, level=1)
+    ind = '..'*level
+    ind+code_block.gsub(/\n/m, "\n"+ind)
+    #code_block
   end
 
   def set_next_state()
@@ -317,7 +346,7 @@ class JSV
 
     line.split('').each do |c|
       @c = c
-      if self.set_next_state then #state changed        
+      if self.set_next_state then #state changed
         self.state_changed
       else
         #check tag state
@@ -350,18 +379,18 @@ class JSV
     else
       @tokens[@state] += _js
     end
-    
+
     @tokens['js'] = ''
   end
 end
 
-jsv = JSV.new()
-jsv.parse()
+cjsv = CJSV.new()
+cjsv.parse()
 
-if jsv.watch? then
-  Listen.to('.', :filter => /\.jsv$/) do |modified, added, removed|
+if cjsv.watch? then
+  Listen.to('.', :filter => /\.cjsv$/) do |modified, added, removed|
     puts Time.now.strftime("%H:%M:%S")
     puts 'changed '+modified.join('/')+'/'+added.join('/')+'/'+removed.join('/')
-    jsv.parse()
+    cjsv.parse()
   end
 end

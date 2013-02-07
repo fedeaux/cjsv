@@ -3,18 +3,26 @@
 require 'rubygems'
 require 'listen'
 
-class JSV
+class CJSV
   def initialize()
+    @previous_line = ''
+    @line = ''
     @stacks = Hash.new()
-    @indentation_level = -1
+    @indentation = {
+      'html' => -1,
+      'aux_html' => 0,
+      'input_coffee' => 0,
+      'output_coffee' => -1
+    }
     @path = ''
+    # @debug = true
 
     @opts = {
       'debug' => false,
-      'input_dir' => 'js/_jsv/',
-      'output_dir' => 'js/',
-      'output_filename' => 'jsv.js',
-      'helpers_filename' => File.dirname(__FILE__)+'/jsv_helpers.js',
+      'input_dir' => 'cjsv/',
+      'output_dir' => 'coffee/',
+      'output_filename' => 'jsv.coffee',
+      'helpers_filename' => File.dirname(__FILE__)+'/coffee_jsv_helpers.coffee',
       'output_generated_file' => false,
       'watch_directories' => true,
       'attributes_shorcuts' => {},
@@ -44,7 +52,8 @@ class JSV
     line.strip!
     self.tokenize(line)
 
-    html = '  '*@_indentation_level+'<'+@tokens['tag']
+    #html = '  '*@_indentation_level+
+    html = '<'+@tokens['tag']
     html += ' id="'+@tokens['id'].strip+'"' if @tokens['id'] != nil
     html += ' class="'+@tokens['class'].strip+'"' if @tokens['class'] != nil
 
@@ -59,7 +68,8 @@ class JSV
       html += '>'
     end
 
-    html += "\\\n"+'  '*(@_indentation_level + 1)+@tokens['text'] if @tokens['text'] != nil
+    #html += "\n"+'  '*(@_indentation_level + 1)+@tokens['text'] if @tokens['text'] != nil
+    html += @tokens['text'] if @tokens['text'] != nil
 
     return @tokens['tag'], html
   end
@@ -68,29 +78,31 @@ class JSV
     line.strip[0].chr == '@'
   end
 
-  def outstream_block(html)
-    _html = "\\\n"+html.join("\\\n").gsub('"', '\"').gsub('`', '"')
-
-    return '_outstream += "'+_html+'";'+"\n" if ! _html.empty?
-    return ''
-  end
-
   def is_argline?(line)
     _line = line.strip
     return _line[0].chr+_line[-1].chr == '()'
   end
 
   def is_single_line_block?(line)
-    @is_single_line_block = ((line =~ /if|while|for/i).is_a? Numeric and not (line.include? '{'))
+    @is_single_line_block = ((line =~ /if|while|for|else|unless/i).is_a? Numeric and not (line.include? '{'))
   end
 
   def parse_partial_request(line)
-    line .gsub /^\+load\s*/, '_outstream += JSV.'
+    _line = line
+    if line.include? '+load ' then
+      _line .gsub! /^\+load\s*/, '_outstream += JSV.'
+      @parsed_partial_request = true
+    end
+    _line
+  end
+
+  def must_increase_coffee_indentation()
+    t = /^\s*@\s*(if|while|for|else|unless)/ =~ @previous_line.strip
+    return t == 0
   end
 
   def parse_js_line(line)
     line = (line.gsub('@', '').strip)
-    
     self.parse_partial_request(line)+"\n"
   end
 
@@ -98,30 +110,70 @@ class JSV
     return line.strip[0..1] == '//'
   end
 
+  def outstream_line(line)
+    _i(@indentation['output_coffee'])+'_outstream += "'+line.gsub('"', '\"').gsub('`', '"')+'"'+"\n"
+  end
+
+  def update_coffee_indentation(force = '')
+    if force == '__force_down__' then
+      @indentation['output_coffee'] -= 1
+      @indentation['output_coffee'] = 0 if @indentation['output_coffee'] < 0
+      return
+    end
+
+    if self.must_increase_coffee_indentation then
+      @indentation['output_coffee'] += 1
+      @indentation['input_coffee'] = @indentation['aux_html']
+    elsif @indentation['input_coffee'] > @indentation['aux_html'] then
+      @indentation['output_coffee'] -= 1
+      @indentation['input_coffee'] = @indentation['aux_html']
+    end
+
+    @indentation['output_coffee'] = 0 if @indentation['output_coffee'] < 0
+  end
+
+  def _i(level, char = ' ')
+    level = 0 if level < 0
+    return char*level*2
+  end
+
+  def indent_js_line parsed_line
+    self._i(@indentation['output_coffee'])+parsed_line
+  end
+
   def func_body(file_name)
     html = []
-    parsed_html = ''
+    @parsed_html = ''
 
     begin
       File.foreach(@path+file_name) do |line|
         #There are four types of line: Arguments Line, Embedded JS Line, Comments Line and Indented HTML Line
+        @previous_line = @line unless @line.empty?
+        @line = line
+        puts @previous_line, "["+self.must_increase_coffee_indentation.to_s+"]" if /666/ =~ @line
 
         next if line.strip.empty? or is_comment_line? line
-        @_indentation_level = self.line_identation line
-
+        @indentation['aux_html'] = self.line_identation line
 
         if(self.is_argline? line ) then #Arguments Line
-          @func_args = line.strip.gsub('(', '').gsub(')', '').gsub(' ', '').gsub(',', ', ')
+          @func_args = line.strip.gsub('(', '').gsub(')', '')
+            .gsub(' ', '').gsub(',', ', ')
 
         elsif(self.is_js line) then #Embedded JS Line
           puts 'JS Line: '+line if @opts['debug']
 
-          @indentation_level.downto(@_indentation_level) do |i|
-            html.push '  '*i+'</'+@stacks[i].pop+'>' if @stacks[i] != nil and @stacks[i].size > 0
+          @indentation['html'].downto(@indentation['aux_html']) do |i|
+            if @stacks[i] != nil and @stacks[i].size > 0 then
+              j = i - @indentation['aux_html']
+              @parsed_html += self.outstream_line('</'+@stacks[i].pop+'> # block 01')
+              self.update_coffee_indentation
+            end
           end
-          
-          parsed_html += self.outstream_block(html) if(html.size > 0)
-          parsed_html += '  '*self.line_identation(line) + self.parse_js_line(line)
+
+          #Parse coffeescript
+          parsed_js_line = self.parse_js_line(line)
+
+          @parsed_html += self.indent_js_line parsed_js_line
 
           is_single_line_block? line
 
@@ -130,54 +182,65 @@ class JSV
           puts 'HTML Line: '+line if @opts['debug']
 
           #Closes tags according to the current indentation level
-          @indentation_level.downto(@_indentation_level) do |i|
-            html.push '  '*i+'</'+@stacks[i].pop+'>' if @stacks[i] != nil and @stacks[i].size > 0
+          @indentation['html'].downto(@indentation['aux_html']) do |i|
+            if @stacks[i] != nil and @stacks[i].size > 0 then
+              j = i - @indentation['aux_html']
+              @parsed_html += self.outstream_line('</'+@stacks[i].pop+'> # block 02')
+              self.update_coffee_indentation
+            end
           end
 
           #Parse the tag and generate the html related to this line
           tag, _html = self.tag(line)
 
           if not @self_enclosed_tags.include? tag then
-            @stacks[@_indentation_level] = [] if(not @stacks.has_key?(@_indentation_level))
-            @stacks[@_indentation_level].push tag
+            @stacks[@indentation['aux_html']] = [] if(not @stacks.has_key?(@indentation['aux_html']))
+            @stacks[@indentation['aux_html']].push tag
           end
-          
-          html.push _html
+
+          puts @previous_line, "["+self.must_increase_coffee_indentation.to_s+"]" if /666/ =~ @line
+
+          self.update_coffee_indentation
+          @parsed_html += self.outstream_line _html+" # block 03 "+_html
 
           #If is a single line block, must force the generation of output
           if @is_single_line_block then
-            parsed_html += self.outstream_block(html)
             html = []
             @is_single_line_block = false
           end
 
-          @indentation_level = @_indentation_level
+          @indentation['html'] = @indentation['aux_html']
         end
       end
-      
-      @indentation_level.downto(0) do |i|
-        html.push '  '*i+'</'+@stacks[i].pop+'>' if @stacks[i] != nil and @stacks[i].size > 0
+
+      @indentation['html'].downto(0) do |i|
+        if @stacks[i] != nil and @stacks[i].size > 0 then
+          self.update_coffee_indentation '__force_down__'
+          @parsed_html += self.outstream_line('</'+@stacks[i].pop+'>  # block 04')
+        end
       end
-      
-      parsed_html += self.outstream_block(html)
+
+      @parsed_html
     rescue SystemCallError
     end
   end
-  
+
   def line_identation(line)
     return line.scan(/^\s*/)[0].size/2
   end
-  
+
   def parse_file(file_name)
-    body = self.func_body(file_name)
+    @indentation['output_coffee'] = -1
+
+    body = adjust_indentation self.func_body(file_name)
     @func_args = '' if @func_args.nil?
-    "#{file_name.split('.').first} : function(#{@func_args}) {\n  var _outstream='';\n  #{body}  return _outstream;\n},"
+    "#{file_name.split('.').first} : (#{@func_args}) -> \n  _outstream = ''\n#{body}"
   end
 
   def parse()
     @f = File.new(@opts['output_path'], 'w')
 
-    @f.puts "var JSV = {\n"
+    @f.puts "@JSV = \n"
     @path = @opts['input_dir']
 
     Dir.foreach(@path) do |item|
@@ -187,39 +250,41 @@ class JSV
         self._parse(item)
         @path.gsub!(item+'/', '')
 
-      elsif item.split('.').last == 'jsv'and not item.include? '#' then
+      elsif item.split('.').last == 'cjsv' and not item.include? '#' then
         func = self.parse_file(item)
-        @f.puts func
+        @f.puts self.adjust_indentation func
       end
     end
 
     #Add helper functions
-    @f.puts File.open(@opts['helpers_filename']).read
-
-    @f.puts "}"
+    @f.puts self.adjust_indentation File.open(@opts['helpers_filename']).read
     @f.close
-   
+
     puts File.open(@opts['output_path'], 'r').read if(@opts['output_generated_file'])
   end
 
-  def _parse(dir)
-    @f.puts dir+" : {\n"
+  def _parse(dir, level=1)
+    @f.puts '  '*level+dir+" : \n"
     @path += dir+'/'
 
     Dir.foreach(@path) do |item|
       next if item == '.' or item == '..'
 
       if File.directory? @path+item then
-        self._parse(item)
+        self._parse(item, level+1)
         @path.gsub!(item+'/', '')
 
-      elsif item.split('.').last == 'jsv' then
+      elsif item.split('.').last == 'cjsv' then
         func = self.parse_file(item)
-        @f.puts func
+        @f.puts self.adjust_indentation(func, level+1)
       end
     end
+  end
 
-    @f.puts "},"
+  def adjust_indentation(code_block, level=1)
+    ind = '  '*level
+    ind+code_block.gsub(/\n/m, "\n"+ind)
+    #code_block
   end
 
   def set_next_state()
@@ -317,7 +382,7 @@ class JSV
 
     line.split('').each do |c|
       @c = c
-      if self.set_next_state then #state changed        
+      if self.set_next_state then #state changed
         self.state_changed
       else
         #check tag state
@@ -350,18 +415,18 @@ class JSV
     else
       @tokens[@state] += _js
     end
-    
+
     @tokens['js'] = ''
   end
 end
 
-jsv = JSV.new()
-jsv.parse()
+cjsv = CJSV.new()
+cjsv.parse()
 
-if jsv.watch? then
-  Listen.to('.', :filter => /\.jsv$/) do |modified, added, removed|
+if cjsv.watch? then
+  Listen.to('.', :filter => /\.cjsv$/) do |modified, added, removed|
     puts Time.now.strftime("%H:%M:%S")
     puts 'changed '+modified.join('/')+'/'+added.join('/')+'/'+removed.join('/')
-    jsv.parse()
+    cjsv.parse()
   end
 end
