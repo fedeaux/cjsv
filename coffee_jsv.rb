@@ -16,7 +16,7 @@ class CJSV
       'output_coffee' => 0,
       'curr_html' => 0,
       'last_seen_html' => 0,
-      'increased_coffe_on' => []
+      'increased_coffee_on' => []
     }
 
     @tag_count = {
@@ -50,7 +50,16 @@ class CJSV
   end
 
   def _d(str)
-    @parsed_html += "##"+str+"\n"
+    @parsed_html += "##"+str+"\n" if @opts['debug']
+  end
+
+  def is_there_tags_to_close?()
+    @indentation['general'].downto(@indentation['aux_general']) do |i|
+      if @stacks[i] != nil and @stacks[i].size > 0 then
+        return true
+      end
+    end
+    return false
   end
 
   def update_coffee_indentation(type=nil)
@@ -68,25 +77,29 @@ class CJSV
 
     # Close
     if type == 'close' then
-      #return @tag_count['coffee_block'][@indentation['output_coffee']].nil?
+      _d "called close"
+      return if @tag_count['coffee_block'][@indentation['output_coffee']].nil?
 
       @tag_count['coffee_block'][@indentation['output_coffee']] -= 1
 
-      if @opts['debug']
-        _d "close "+@indentation['output_coffee'].to_s+" "+
-          @tag_count['coffee_block'][@indentation['output_coffee']].to_s
-      end
+      # if @opts['debug']
+      #   _d "close "+@indentation['output_coffee'].to_s+" "+
+      #     @tag_count['coffee_block'][@indentation['output_coffee']].to_s
+      # end
 
       if @tag_count['coffee_block'][@indentation['output_coffee']] == 0 then
         _d "close reached 0 with "+@line
-        _d "  "+@indentation['increased_coffe_on'].inspect+" "+@indentation['aux_general'].to_s
+        _d "  "+@indentation['increased_coffee_on'].inspect+" "+@indentation['aux_general'].to_s
 
         # It must only decrease if the current line has a identation larger
         # or equal to the one that generated the block
-        if @indentation['increased_coffe_on'].size == 0 or
-            @indentation['increased_coffe_on'][-1] >= @indentation['aux_general'] then
+        if @indentation['increased_coffee_on'].size == 0 or
+            @indentation['increased_coffee_on'][-1] >= @indentation['aux_general'] then
           @indentation['output_coffee'] -= 1
+          @indentation['increased_coffee_on'].pop
         end
+      else
+        _d "close decreased "+@indentation['output_coffee'].to_s+" with line "+@line
       end
 
       @indentation['output_coffee'] = 0 if @indentation['output_coffee'] < 0
@@ -106,26 +119,45 @@ class CJSV
         _d "increased"
       end
 
-      @indentation['increased_coffe_on'] << self.line_identation(@previous_line)
+      @indentation['increased_coffee_on'] << self.line_identation(@previous_line)
       @indentation['output_coffee'] += 1
 
       if @tag_count['coffee_block'][@indentation['output_coffee']].nil? then
         @tag_count['coffee_block'][@indentation['output_coffee']] = 0
       end
+    elsif type == 'js' or type.nil? then
+      #   it must decrease the identation on type = nil only if the last
+      # line is JS and there is no tag at this level to close
+      if type.nil? then
+        if ! self.is_previous_line_js? or self.is_there_tags_to_close? then
+          return
+        end
+        _d "Decreasing with nil type"
+      end
 
-    elsif type == 'js' then
-      while @indentation['increased_coffe_on'].size > 0 and
-          @indentation['increased_coffe_on'][-1] >= @indentation['aux_general'] do
+      while @indentation['increased_coffee_on'].size > 0 and @indentation['increased_coffee_on'][-1] >= @indentation['aux_general'] do
 
         if @opts['debug']
           _d "decreased"
         end
 
-        @indentation['increased_coffe_on'].pop
+        @indentation['increased_coffee_on'].pop
         @indentation['output_coffee'] -= 1
         @indentation['input_coffee'] = @indentation['aux_general']
       end
     end
+
+    # elsif type == 'js' then
+    #   while @indentation['increased_coffee_on'].size > 0 and @indentation['increased_coffee_on'][-1] >= @indentation['aux_general'] do
+
+    #     if @opts['debug']
+    #       _d "decreased"
+    #     end
+
+    #     @indentation['increased_coffee_on'].pop
+    #     @indentation['output_coffee'] -= 1
+    #     @indentation['input_coffee'] = @indentation['aux_general']
+    #   end
 
     @indentation['output_coffee'] = 0 if @indentation['output_coffee'] < 0
   end
@@ -165,7 +197,9 @@ class CJSV
   end
 
   def is_js(line)
-    line.strip[0].chr == '@'
+    _line = line.strip
+    return _line[0].chr == '@' unless _line == ''
+    false
   end
 
   def is_argline?(line)
@@ -184,6 +218,10 @@ class CJSV
       @parsed_partial_request = true
     end
     _line
+  end
+
+  def is_previous_line_js?()
+    self.is_js @previous_line
   end
 
   def must_increase_coffee_indentation()
@@ -244,10 +282,12 @@ class CJSV
     begin
       File.foreach(@path+file_name) do |line|
         #There are four types of line: Arguments Line, Embedded JS Line, Comments Line and Indented HTML Line
+
+        next if line.strip.empty? or is_comment_line? line
+
         @previous_line = @line unless @line.empty?
         @line = line
 
-        next if line.strip.empty? or is_comment_line? line
         @indentation['aux_general'] = self.line_identation line
 
         if(self.is_argline? line ) then #Arguments Line
