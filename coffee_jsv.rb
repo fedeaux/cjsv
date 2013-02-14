@@ -18,6 +18,7 @@ class CJSV
       'last_seen_html' => 0,
       'increased_coffe_on' => []
     }
+
     @tag_count = {
       'coffee_block' => {0 => 0}
     }
@@ -34,7 +35,7 @@ class CJSV
       'watch_directories' => true,
       'attributes_shorcuts' => {},
       'tags_shorcuts' => {},
-      'optmizations' => ['delete_comments'] #'shrink_blocks',
+      'optmizations' => ['delete_comments', 'shrink_blocks'] #
     }
 
     @opts['output_path'] = @opts['output_dir']+@opts['output_filename']
@@ -49,12 +50,13 @@ class CJSV
   end
 
   def _d(str)
-    @parsed_html += "#"+str+"\n"
+    @parsed_html += "##"+str+"\n"
   end
 
   def update_coffee_indentation(type=nil)
-    _d "gogogo"
+    _d "gogogo "+type.to_s
 
+    # Close All
     if type == 'close_all' then
       if @tag_count['coffee_block'][@indentation['output_coffee']] == 0 then
         _d "Closed all for "+@line
@@ -64,16 +66,20 @@ class CJSV
       return
     end
 
+    # Close
     if type == 'close' then
+      #return @tag_count['coffee_block'][@indentation['output_coffee']].nil?
+
       @tag_count['coffee_block'][@indentation['output_coffee']] -= 1
 
-      if @opts['debug'] or true
-        _d "close "+@indentation['output_coffee'].to_s+" -> "+@tag_count['coffee_block'][@indentation['output_coffee']].to_s
+      if @opts['debug']
+        _d "close "+@indentation['output_coffee'].to_s+" "+
+          @tag_count['coffee_block'][@indentation['output_coffee']].to_s
       end
 
       if @tag_count['coffee_block'][@indentation['output_coffee']] == 0 then
-        _d "close reached 0 with ["+@line
-        _d " -> "+@indentation['increased_coffe_on'].inspect+" "+@indentation['aux_general'].to_s
+        _d "close reached 0 with "+@line
+        _d "  "+@indentation['increased_coffe_on'].inspect+" "+@indentation['aux_general'].to_s
 
         # It must only decrease if the current line has a identation larger
         # or equal to the one that generated the block
@@ -89,7 +95,7 @@ class CJSV
       @tag_count['coffee_block'][@indentation['output_coffee']] += 1
 
       if @opts['debug'] or true
-        @parsed_html += "#open "+@indentation['output_coffee'].to_s+" ->  "+@tag_count['coffee_block'][@indentation['output_coffee']].to_s+"\n"
+        _d "open "+@indentation['output_coffee'].to_s+" ->  "+@tag_count['coffee_block'][@indentation['output_coffee']].to_s
       end
 
       return
@@ -97,12 +103,11 @@ class CJSV
 
     if self.must_increase_coffee_indentation then
       if @opts['debug']
-        @parsed_html += "#increased\n"
+        _d "increased"
       end
 
       @indentation['increased_coffe_on'] << self.line_identation(@previous_line)
       @indentation['output_coffee'] += 1
-      #puts @indentation['increased_coffe_on'].inspect
 
       if @tag_count['coffee_block'][@indentation['output_coffee']].nil? then
         @tag_count['coffee_block'][@indentation['output_coffee']] = 0
@@ -113,7 +118,7 @@ class CJSV
           @indentation['increased_coffe_on'][-1] >= @indentation['aux_general'] do
 
         if @opts['debug']
-          @parsed_html += "#decreased\n"
+          _d "decreased"
         end
 
         @indentation['increased_coffe_on'].pop
@@ -137,7 +142,6 @@ class CJSV
     line.strip!
     self.tokenize(line)
 
-    #html = '  '*@_indentation_level+
     html = '<'+@tokens['tag']
     html += ' id="'+@tokens['id'].strip+'"' if @tokens['id'] != nil
     html += ' class="'+@tokens['class'].strip+'"' if @tokens['class'] != nil
@@ -155,7 +159,6 @@ class CJSV
       html += '>'
     end
 
-    #html += "\n"+'  '*(@_indentation_level + 1)+@tokens['text'] if @tokens['text'] != nil
     html += @tokens['text'] if @tokens['text'] != nil
 
     return @tokens['tag'], html
@@ -184,7 +187,7 @@ class CJSV
   end
 
   def must_increase_coffee_indentation()
-    t = /^\s*@\s*(if|while|for|else|unless)/ =~ @previous_line.strip
+    t = /^\s*@\s*(if|while|for|else|unless)(\s|$)/ =~ @previous_line.strip
     return t == 0
   end
 
@@ -194,12 +197,13 @@ class CJSV
   end
 
   def is_comment_line? line
-    return line.strip[0] == '#'
+    n = line =~ /(\s*)(##)(.*)$/
+    return n == 0
   end
 
   def outstream_line(line, comment = '')
     unless comment.empty?
-      comment = '  #'+comment
+      comment = '  ##'+comment
     end
 
     line = _i(@indentation['curr_html'])+line.gsub('"', '\"').gsub('`', '"')+'"'
@@ -517,17 +521,17 @@ class CJSV
   end
 
   def optmize()
-    if @opts['optmizations'].include? 'shrink_blocks' then
-      self.optz_shrink_blocks
-    end
-
     if @opts['optmizations'].include? 'delete_comments' then
       self.optz_delete_comments
+    end
+
+    if @opts['optmizations'].include? 'shrink_blocks' then
+      self.optz_shrink_blocks
     end
   end
 
   def is_outsream_line(line)
-    (line =~ /^\s*_outstream\s+(\+)?=.*"$/) == 0
+    (line =~ /^\s*_outstream\s+(\+)?=.*"/) == 0
   end
 
   def remove_outstream_line(line)
@@ -539,7 +543,12 @@ class CJSV
     line.gsub /(.*)(")(.*)$/, '\1\3'
   end
 
+  def remove_trailing_comment(line)
+    line.gsub /(.*)(##)(.*)$/, '\1'
+  end
+
   def optz_shrink_blocks()
+    puts "Shrink Blocks"
     path = @opts['output_dir']+@opts['output_filename']
     prev_line = nil
     write_line = nil
@@ -549,6 +558,8 @@ class CJSV
     f = File.open path, 'w'
 
     File.foreach path+'.tmp' do |line|
+      next if line.strip.empty?
+
       indents.push self.line_identation line
 
       if self.is_outsream_line(line) then
@@ -559,6 +570,7 @@ class CJSV
           write_line = prev_line
           prev_line = line
         end
+
         prev_is_outs = true
       else
         write_line = prev_line
@@ -580,7 +592,7 @@ class CJSV
 
     File.foreach path+'.tmp' do |line|
       unless is_comment_line? line
-        f.puts line
+        f.puts remove_trailing_comment line
       end
     end
 
