@@ -6,6 +6,7 @@ require 'fileutils'
 
 class CJSV
   def initialize()
+    @_c = []
     @previous_line = ''
     @line = ''
     @stacks = Hash.new()
@@ -54,7 +55,9 @@ class CJSV
   end
 
   def is_there_tags_to_close?()
-    @indentation['general'].downto(@indentation['aux_general']) do |i|
+    # checks for tags to close on upper indents
+
+    @indentation['general'].downto(@indentation['aux_general'] + 1) do |i|
       if @stacks[i] != nil and @stacks[i].size > 0 then
         return true
       end
@@ -81,11 +84,6 @@ class CJSV
       return if @tag_count['coffee_block'][@indentation['output_coffee']].nil?
 
       @tag_count['coffee_block'][@indentation['output_coffee']] -= 1
-
-      # if @opts['debug']
-      #   _d "close "+@indentation['output_coffee'].to_s+" "+
-      #     @tag_count['coffee_block'][@indentation['output_coffee']].to_s
-      # end
 
       if @tag_count['coffee_block'][@indentation['output_coffee']] == 0 then
         _d "close reached 0 with "+@line
@@ -375,7 +373,7 @@ class CJSV
 
     body = adjust_indentation self.func_body(file_name)
     @func_args = '' if @func_args.nil?
-    "#{file_name.split('.').first} : (#{@func_args}) -> \n  _outstream = \"\"\n#{body}"
+    "#{file_name.split('.').first} : (#{@func_args}) -> \n  _outstream = \"\"\n#{body}\n  _outstream"
   end
 
   def parse()
@@ -439,21 +437,21 @@ class CJSV
         @state = 'class'
       elsif @c == '=' then
         @state = 'text' #must be terminal state
-      elsif @c == '+' then
+      elsif @c == '+' and @_c[-1] != '\\' then
         @state = 'js'
       elsif @c == '[' then
         @state = 'attr_name'
       end
 
     elsif ['js'].include? @state then
-      if @c == '+' then
+      if @c == '+' and @_c[-1] != '\\' then
         @state = @last_state
       end
 
     elsif ['attr_name', 'attr_value'].include? @state then
       if @c == '=' then
         @state = 'attr_value'
-      elsif @c == '+' then
+      elsif @c == '+'  and @_c[-1] != '\\' then
         @state = 'js'
       elsif @c == ']' then
         @state = 'none'
@@ -522,7 +520,9 @@ class CJSV
                 'attr' => {}}
 
     line.split('').each do |c|
+      @_c << @c
       @c = c
+
       if self.set_next_state then #state changed
         self.state_changed
       else
