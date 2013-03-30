@@ -6,25 +6,13 @@ require 'fileutils'
 
 class CJSV
   def initialize()
-    @_c = []
     @previous_line = ''
     @line = ''
     @stacks = Hash.new()
-    @indentation = {
-      'general' => -1,
-      'aux_general' => 0,
-      'input_coffee' => 0,
-      'output_coffee' => 0,
-      'curr_html' => 0,
-      'last_seen_html' => 0,
-      'increased_coffee_on' => []
-    }
-
-    @tag_count = {
-      'coffee_block' => {0 => 0}
-    }
 
     @path = ''
+
+    self.set_initial_state
 
     @opts = {
       'debug' => false,
@@ -50,14 +38,28 @@ class CJSV
     @self_enclosed_tags = ['img', 'br', 'hr', 'input']
   end
 
+  def set_initial_state()
+    @indentation = {
+      'general' => -1,
+      'aux_general' => 0,
+      'input_coffee' => 0,
+      'output_coffee' => 0,
+      'curr_html' => 0,
+      'last_seen_html' => 0,
+      'increased_coffee_on' => []
+    }
+
+    @tag_count = {
+      'coffee_block' => {0 => 0}
+    }
+  end
+
   def _d(str)
     @parsed_html += "##"+str+"\n" if @opts['debug']
   end
 
   def is_there_tags_to_close?()
-    # checks for tags to close on upper indents
-
-    @indentation['general'].downto(@indentation['aux_general'] + 1) do |i|
+    @indentation['general'].downto(@indentation['aux_general']) do |i|
       if @stacks[i] != nil and @stacks[i].size > 0 then
         return true
       end
@@ -84,6 +86,11 @@ class CJSV
       return if @tag_count['coffee_block'][@indentation['output_coffee']].nil?
 
       @tag_count['coffee_block'][@indentation['output_coffee']] -= 1
+
+      # if @opts['debug']
+      #   _d "close "+@indentation['output_coffee'].to_s+" "+
+      #     @tag_count['coffee_block'][@indentation['output_coffee']].to_s
+      # end
 
       if @tag_count['coffee_block'][@indentation['output_coffee']] == 0 then
         _d "close reached 0 with "+@line
@@ -369,11 +376,11 @@ class CJSV
   end
 
   def parse_file(file_name)
-    @indentation['output_coffee'] = 0
+    self.set_initial_state
 
     body = adjust_indentation self.func_body(file_name)
     @func_args = '' if @func_args.nil?
-    "#{file_name.split('.').first} : (#{@func_args}) -> \n  _outstream = \"\"\n#{body}\n  _outstream"
+    "#{file_name.split('.').first} : (#{@func_args}) -> \n  _outstream = \"\"\n#{body}"
   end
 
   def parse()
@@ -388,7 +395,6 @@ class CJSV
       if File.directory? @path+item then
         self._parse(item)
         @path.gsub!(item+'/', '')
-
       elsif item.split('.').last == 'cjsv' and not item.include? '#' then
         func = self.parse_file(item)
         @f.puts self.adjust_indentation func
@@ -437,21 +443,21 @@ class CJSV
         @state = 'class'
       elsif @c == '=' then
         @state = 'text' #must be terminal state
-      elsif @c == '+' and @_c[-1] != '\\' then
+      elsif @c == '+' then
         @state = 'js'
       elsif @c == '[' then
         @state = 'attr_name'
       end
 
     elsif ['js'].include? @state then
-      if @c == '+' and @_c[-1] != '\\' then
+      if @c == '+' then
         @state = @last_state
       end
 
     elsif ['attr_name', 'attr_value'].include? @state then
       if @c == '=' then
         @state = 'attr_value'
-      elsif @c == '+'  and @_c[-1] != '\\' then
+      elsif @c == '+' then
         @state = 'js'
       elsif @c == ']' then
         @state = 'none'
@@ -520,9 +526,7 @@ class CJSV
                 'attr' => {}}
 
     line.split('').each do |c|
-      @_c << @c
       @c = c
-
       if self.set_next_state then #state changed
         self.state_changed
       else
@@ -649,6 +653,8 @@ if cjsv.watch? then
   Listen.to('.', :filter => /\.cjsv$/) do |modified, added, removed|
     puts Time.now.strftime("%H:%M:%S")
     puts 'changed '+modified.join('/')+'/'+added.join('/')+'/'+removed.join('/')
+
+    cjsv = CJSV.new
     cjsv.parse
     cjsv.optmize
   end
