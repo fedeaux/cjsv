@@ -24,10 +24,14 @@ class CJSV
       'watch_directories' => true,
       'attributes_shorcuts' => {},
       'tags_shorcuts' => {},
-      'optmizations' => ['delete_comments', 'shrink_blocks'] #
+      'optmizations' => ['delete_comments', 'shrink_blocks'] #'delete_comments'
     }
 
     @opts['output_path'] = @opts['output_dir']+@opts['output_filename']
+
+    @no_conflict = {
+      '\+' => '__JSV_PLUS_SIGN_PLACEHOLDER_4712891294__'
+    }
 
     if File.exist?('.jsv-config.rb') then
       require './.jsv-config.rb'
@@ -36,6 +40,18 @@ class CJSV
     end
 
     @self_enclosed_tags = ['img', 'br', 'hr', 'input']
+  end
+
+  def preprocess_line()
+    @no_conflict.each do |pair|
+      @line.gsub! pair[0], pair[1]
+    end
+  end
+
+  def postprocess_html()
+    @no_conflict.each do |pair|
+      @parsed_html.gsub! pair[1], pair[0][1..-1]
+    end
   end
 
   def set_initial_state()
@@ -52,6 +68,8 @@ class CJSV
     @tag_count = {
       'coffee_block' => {0 => 0}
     }
+
+    @func_args = nil
   end
 
   def _d(str)
@@ -86,11 +104,6 @@ class CJSV
       return if @tag_count['coffee_block'][@indentation['output_coffee']].nil?
 
       @tag_count['coffee_block'][@indentation['output_coffee']] -= 1
-
-      # if @opts['debug']
-      #   _d "close "+@indentation['output_coffee'].to_s+" "+
-      #     @tag_count['coffee_block'][@indentation['output_coffee']].to_s
-      # end
 
       if @tag_count['coffee_block'][@indentation['output_coffee']] == 0 then
         _d "close reached 0 with "+@line
@@ -152,18 +165,6 @@ class CJSV
       end
     end
 
-    # elsif type == 'js' then
-    #   while @indentation['increased_coffee_on'].size > 0 and @indentation['increased_coffee_on'][-1] >= @indentation['aux_general'] do
-
-    #     if @opts['debug']
-    #       _d "decreased"
-    #     end
-
-    #     @indentation['increased_coffee_on'].pop
-    #     @indentation['output_coffee'] -= 1
-    #     @indentation['input_coffee'] = @indentation['aux_general']
-    #   end
-
     @indentation['output_coffee'] = 0 if @indentation['output_coffee'] < 0
   end
 
@@ -201,9 +202,17 @@ class CJSV
     return @tokens['tag'], html
   end
 
+  def is_js_block_begin(line)
+    line.strip == '<?@'
+  end
+
+  def is_js_block_end(line)
+    line.strip == '?>'
+  end
+
   def is_js(line)
     _line = line.strip
-    return _line[0].chr == '@' unless _line == ''
+    return (_line[0].chr == '@' or @in_js_block) unless _line == ''
     false
   end
 
@@ -218,10 +227,15 @@ class CJSV
 
   def parse_partial_request(line)
     _line = line
+
     if line.include? '+load ' then
       _line .gsub! /^\+load\s*/, '_outstream += JSV.'
       @parsed_partial_request = true
+    elsif line.include? '+append ' then
+      _line .gsub! /^\+append\s*/, '_outstream += '
+      @parsed_partial_request = true
     end
+
     _line
   end
 
@@ -292,13 +306,15 @@ class CJSV
 
         @previous_line = @line unless @line.empty?
         @line = line
+        self.preprocess_line
 
         @indentation['aux_general'] = self.line_identation line
 
         if(self.is_argline? line ) then #Arguments Line
           @func_args = line.strip.gsub('(', '').gsub(')', '')
             .gsub(' ', '').gsub(',', ', ')
-
+        elsif self.is_js_block_end line then
+          @in_js_block = false
         elsif(self.is_js line) then #Embedded JS Line
           puts 'JS Line: '+line if @opts['debug']
 
@@ -321,6 +337,8 @@ class CJSV
           is_single_line_block? line
 
           html = []
+        elsif self.is_js_block_begin line then
+          @in_js_block = true
         else #Indented HTML Line
           puts 'HTML Line: '+line if @opts['debug']
           self.update_coffee_indentation
@@ -366,6 +384,7 @@ class CJSV
         end
       end
 
+      self.postprocess_html
       @parsed_html
     rescue SystemCallError
     end
@@ -380,7 +399,7 @@ class CJSV
 
     body = adjust_indentation self.func_body(file_name)
     @func_args = '' if @func_args.nil?
-    "#{file_name.split('.').first} : (#{@func_args}) -> \n  _outstream = \"\"\n#{body}"
+    "#{file_name.split('.').first} : (#{@func_args}) -> \n  _outstream = \"\"\n#{body}return _outstream\n"
   end
 
   def parse()
@@ -436,7 +455,13 @@ class CJSV
     _last_state = @state
 
     # states = tag, class, id, text, attr_name, attr_value, js
-    if ['tag', 'class', 'id', 'none', 'text'].include? @state then
+
+    if @state == 'text' then
+      if @c == '+' then
+        @state = 'js'
+      end
+
+    elsif ['tag', 'class', 'id', 'none'].include? @state then
       if @c == '#' then
         @state = 'id'
       elsif @c == '.' then
@@ -647,7 +672,6 @@ end
 
 cjsv = CJSV.new
 cjsv.parse
-cjsv.optmize
 
 if cjsv.watch? then
   Listen.to('.', :filter => /\.cjsv$/) do |modified, added, removed|
@@ -656,6 +680,5 @@ if cjsv.watch? then
 
     cjsv = CJSV.new
     cjsv.parse
-    cjsv.optmize
   end
 end
