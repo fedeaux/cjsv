@@ -9,6 +9,7 @@ class CJSV
     @previous_line = ''
     @line = ''
     @stacks = Hash.new()
+    @output_stream = ''
 
     @path = ''
 
@@ -24,7 +25,7 @@ class CJSV
       'watch_directories' => true,
       'attributes_shorcuts' => {},
       'tags_shorcuts' => {},
-      'optmizations' => ['delete_comments', 'shrink_blocks'] #'delete_comments'
+      'optmizations' => ['delete_comments', 'shrink_blocks']
     }
 
     @opts['output_path'] = @opts['output_dir']+@opts['output_filename']
@@ -402,10 +403,14 @@ class CJSV
     "#{file_name.split('.').first} : (#{@func_args}) -> \n  _outstream = \"\"\n#{body}return _outstream\n"
   end
 
-  def parse()
-    @f = File.new(@opts['output_path'], 'w')
+  def write_output()
+    f = File.new(@opts['output_path'], 'w')
+    f.puts @output_stream
+    f.close
+  end
 
-    @f.puts "@JSV = \n"
+  def parse()
+    self.output_line "@JSV = \n"
     @path = @opts['input_dir']
 
     Dir.foreach(@path) do |item|
@@ -416,19 +421,21 @@ class CJSV
         @path.gsub!(item+'/', '')
       elsif item.split('.').last == 'cjsv' and not item.include? '#' then
         func = self.parse_file(item)
-        @f.puts self.adjust_indentation func
+        self.output_line self.adjust_indentation func
       end
     end
 
     #Add helper functions
-    @f.puts self.adjust_indentation File.open(@opts['helpers_filename']).read
-    @f.close
+    self.output_line self.adjust_indentation File.open(@opts['helpers_filename']).read
 
-    #puts File.open(@opts['output_path'], 'r').read if(@opts['output_generated_file'])
+    #Make optmizations
+    self.optmize
+
+    self.write_output
   end
 
   def _parse(dir, level=1)
-    @f.puts '  '*level+dir+" : \n"
+    self.output_line '  '*level+dir+" : \n"
     @path += dir+'/'
 
     Dir.foreach(@path) do |item|
@@ -440,7 +447,7 @@ class CJSV
 
       elsif item.split('.').last == 'cjsv' then
         func = self.parse_file(item)
-        @f.puts self.adjust_indentation(func, level+1)
+        self.output_line self.adjust_indentation(func, level+1)
       end
     end
   end
@@ -618,15 +625,12 @@ class CJSV
 
   def optz_shrink_blocks()
     puts "Shrink Blocks"
-    path = @opts['output_dir']+@opts['output_filename']
     prev_line = nil
     write_line = nil
     prev_is_outs = false
     indents = []
-    FileUtils.copy path, path+'.tmp'
-    f = File.open path, 'w'
 
-    File.foreach path+'.tmp' do |line|
+    self.get_and_clear_output_stream_lines.each do |line|
       next if line.strip.empty?
 
       indents.push self.line_identation line
@@ -647,27 +651,30 @@ class CJSV
         prev_is_outs = false
       end
 
-      f.puts write_line if !write_line.nil?
+      self.output_line write_line if !write_line.nil?
     end
-
-    f.close
-    File.delete path+'.tmp'
   end
 
   def optz_delete_comments()
-    path = @opts['output_dir']+@opts['output_filename']
-    FileUtils.copy path, path+'.tmp'
-    f = File.open path, 'w'
+    puts "Delete Comments"
 
-    File.foreach path+'.tmp' do |line|
+    self.get_and_clear_output_stream_lines.each do |line|
       unless is_comment_line? line
-        f.puts remove_trailing_comment line
+         self.output_line remove_trailing_comment line
       end
     end
-
-    f.close
-    File.delete path+'.tmp'
   end
+
+  def get_and_clear_output_stream_lines()
+    aux_output_stream = @output_stream.split "\n"
+    @output_stream = ''
+    aux_output_stream
+  end
+
+  def output_line(line)
+    @output_stream += line+"\n"
+  end
+
 end
 
 cjsv = CJSV.new
