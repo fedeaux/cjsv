@@ -681,10 +681,10 @@ cjsv = CJSV.new
 cjsv.parse
 
 if cjsv.watch? then
-  Listen.to('.', :filter => /\.cjsv$/) do |modified, added, removed|
+  Listen.to!('.', :filter => /\.cjsv$/) do |modified, added, removed|
     puts Time.now.strftime("%H:%M:%S")
     puts 'changed '+modified.join('/')+'/'+added.join('/')+'/'+removed.join('/')
-
+      
     cjsv = CJSV.new
     cjsv.parse
   end
