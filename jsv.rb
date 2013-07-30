@@ -313,7 +313,8 @@ class JSV
 
     begin
       File.foreach(@path+file_name) do |line|
-        #There are four types of line: Arguments Line, Embedded JS Line, Comments Line and Indented HTML Line
+        # There are four types of line:
+        #   Arguments Line, Embedded JS Line, Comments Line and Indented HTML Line
 
         next if line.strip.empty? or is_comment_line? line
 
@@ -326,8 +327,10 @@ class JSV
         if(self.is_argline? line ) then #Arguments Line
           @func_args = line.strip.gsub('(', '').gsub(')', '')
             .gsub(' ', '').gsub(',', ', ')
+
         elsif self.is_js_block_end line then
           @in_js_block = false
+
         elsif(self.is_js line) then #Embedded JS Line
           puts 'JS Line: '+line if @config['debug']
 
@@ -468,14 +471,12 @@ class JSV
   def adjust_indentation(code_block, level=1)
     ind = '  '*level
     ind+code_block.gsub(/\n/m, "\n"+ind)
-    #code_block
   end
 
   def set_next_state()
     _last_state = @state
 
     # states = tag, class, id, text, attr_name, attr_value, js
-
     if @state == 'text' then
       if @c == '+' then
         @state = 'js'
