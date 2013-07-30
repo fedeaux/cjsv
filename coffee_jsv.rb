@@ -4,7 +4,7 @@ require 'rubygems'
 require 'listen'
 require 'fileutils'
 
-class CJSV
+class JSV
   def initialize()
     @previous_line = ''
     @line = ''
@@ -25,7 +25,8 @@ class CJSV
       'watch_directories' => true,
       'attributes_shorcuts' => {},
       'tags_shorcuts' => {},
-      'optmizations' => ['delete_comments', 'shrink_blocks']
+      'optmizations' => ['delete_comments', 'shrink_blocks'],
+      'object_name' => 'Views'
     }
 
     @opts['output_path'] = @opts['output_dir']+@opts['output_filename']
@@ -230,7 +231,7 @@ class CJSV
     _line = line
 
     if line.include? '+load ' then
-      _line .gsub! /^\+load\s*/, '_outstream += JSV.'
+      _line .gsub! /^\+load\s*/, '_outstream += '+@opts['object_name']+'.'
       @parsed_partial_request = true
     elsif line.include? '+append ' then
       _line .gsub! /^\+append\s*/, '_outstream += '
@@ -410,7 +411,7 @@ class CJSV
   end
 
   def parse()
-    self.output_line "@JSV = \n"
+    self.output_line "@"+@opts['object_name']+" = \n"
     @path = @opts['input_dir']
 
     Dir.foreach(@path) do |item|
@@ -419,6 +420,7 @@ class CJSV
       if File.directory? @path+item then
         self._parse(item)
         @path.gsub!(item+'/', '')
+
       elsif item.split('.').last == 'cjsv' and not item.include? '#' then
         func = self.parse_file(item)
         self.output_line self.adjust_indentation func
@@ -677,7 +679,7 @@ class CJSV
 
 end
 
-cjsv = CJSV.new
+cjsv = JSV.new
 cjsv.parse
 
 if cjsv.watch? then
@@ -685,7 +687,7 @@ if cjsv.watch? then
     puts Time.now.strftime("%H:%M:%S")
     puts 'changed '+modified.join('/')+'/'+added.join('/')+'/'+removed.join('/')
       
-    cjsv = CJSV.new
+    cjsv = JSV.new
     cjsv.parse
   end
 end
