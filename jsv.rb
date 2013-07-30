@@ -20,7 +20,7 @@ class JSV
       'input_dir' => 'cjsv/',
       'output_dir' => 'coffee/',
       'output_filename' => 'jsv.coffee',
-      'helpers_filename' => File.dirname(__FILE__)+'/coffee_jsv_helpers.coffee',
+      'helpers_filename' => File.dirname(__FILE__)+'/helpers.coffee',
       'output_generated_file' => false,
       'watch_directories' => true,
       'attributes_shorcuts' => {},
