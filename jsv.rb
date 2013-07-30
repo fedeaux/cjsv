@@ -3,6 +3,7 @@
 require 'rubygems'
 require 'listen'
 require 'fileutils'
+require 'optparse'
 
 class JSV
   def initialize()
@@ -15,7 +16,7 @@ class JSV
 
     self.set_initial_state
 
-    @opts = {
+    @config = {
       'debug' => false,
       'input_dir' => 'cjsv/',
       'output_dir' => 'coffee/',
@@ -29,7 +30,17 @@ class JSV
       'object_name' => 'Views'
     }
 
-    @opts['output_path'] = @opts['output_dir']+@opts['output_filename']
+    OptionParser.new do |opts|
+      opts.on("--input_dir [INPUT_DIR]", :text, "Root folder to watch") do |v|
+        @config['input_dir'] = v
+      end
+
+      opts.on("--output_dir [OUTPUT_DIR]", :text, "Root folder to watch") do |v|
+        @config['output_dir'] = v
+      end
+    end.parse!
+    
+    @config['output_path'] = @config['output_dir']+@config['output_filename']
 
     @no_conflict = {
       '\+' => '__JSV_PLUS_SIGN_PLACEHOLDER_4712891294__'
@@ -38,7 +49,7 @@ class JSV
     if File.exist?('.jsv-config.rb') then
       require './.jsv-config.rb'
       puts "using .jsv-config"
-      @opts.merge!(preferences)
+      @config.merge!(preferences)
     end
 
     @self_enclosed_tags = ['img', 'br', 'hr', 'input']
@@ -75,7 +86,7 @@ class JSV
   end
 
   def _d(str)
-    @parsed_html += "##"+str+"\n" if @opts['debug']
+    @parsed_html += "##"+str+"\n" if @config['debug']
   end
 
   def is_there_tags_to_close?()
@@ -127,7 +138,7 @@ class JSV
     elsif type == 'open' then
       @tag_count['coffee_block'][@indentation['output_coffee']] += 1
 
-      if @opts['debug'] or true
+      if @config['debug'] or true
         _d "open "+@indentation['output_coffee'].to_s+" ->  "+@tag_count['coffee_block'][@indentation['output_coffee']].to_s
       end
 
@@ -135,7 +146,7 @@ class JSV
     end
 
     if self.must_increase_coffee_indentation then
-      if @opts['debug']
+      if @config['debug']
         _d "increased"
       end
 
@@ -157,7 +168,7 @@ class JSV
 
       while @indentation['increased_coffee_on'].size > 0 and @indentation['increased_coffee_on'][-1] >= @indentation['aux_general'] do
 
-        if @opts['debug']
+        if @config['debug']
           _d "decreased"
         end
 
@@ -171,11 +182,11 @@ class JSV
   end
 
   def get_helpers_file()
-    return @opts['helpers_filename']
+    return @config['helpers_filename']
   end
 
   def watch?()
-    return @opts['watch_directories']
+    return @config['watch_directories']
   end
 
   def tag(line)
@@ -231,7 +242,7 @@ class JSV
     _line = line
 
     if line.include? '+load ' then
-      _line .gsub! /^\+load\s*/, '_outstream += '+@opts['object_name']+'.'
+      _line .gsub! /^\+load\s*/, '_outstream += '+@config['object_name']+'.'
       @parsed_partial_request = true
     elsif line.include? '+append ' then
       _line .gsub! /^\+append\s*/, '_outstream += '
@@ -318,7 +329,7 @@ class JSV
         elsif self.is_js_block_end line then
           @in_js_block = false
         elsif(self.is_js line) then #Embedded JS Line
-          puts 'JS Line: '+line if @opts['debug']
+          puts 'JS Line: '+line if @config['debug']
 
           @indentation['general'].downto(@indentation['aux_general']) do |i|
             if @stacks[i] != nil and @stacks[i].size > 0 then
@@ -342,7 +353,7 @@ class JSV
         elsif self.is_js_block_begin line then
           @in_js_block = true
         else #Indented HTML Line
-          puts 'HTML Line: '+line if @opts['debug']
+          puts 'HTML Line: '+line if @config['debug']
           self.update_coffee_indentation
 
           #Closes tags according to the current indentation level
@@ -405,14 +416,14 @@ class JSV
   end
 
   def write_output()
-    f = File.new(@opts['output_path'], 'w')
+    f = File.new(@config['output_path'], 'w')
     f.puts @output_stream
     f.close
   end
 
   def parse()
-    self.output_line "@"+@opts['object_name']+" = \n"
-    @path = @opts['input_dir']
+    self.output_line "@"+@config['object_name']+" = \n"
+    @path = @config['input_dir']
 
     Dir.foreach(@path) do |item|
       next if item == '.' or item == '..'
@@ -428,7 +439,7 @@ class JSV
     end
 
     #Add helper functions
-    self.output_line self.adjust_indentation File.open(@opts['helpers_filename']).read
+    self.output_line self.adjust_indentation File.open(@config['helpers_filename']).read
 
     #Make optmizations
     self.optmize
@@ -507,22 +518,22 @@ class JSV
   end
 
   def attributes_shortcuts()
-    if not @opts['attributes_shortcuts'].nil? and @opts['attributes_shortcuts'].has_key? @current_attribute then
-      @current_attribute = @opts['attributes_shortcuts'][@current_attribute]
+    if not @config['attributes_shortcuts'].nil? and @config['attributes_shortcuts'].has_key? @current_attribute then
+      @current_attribute = @config['attributes_shortcuts'][@current_attribute]
     end
   end
 
   def values_shortcuts()
     value = @tokens['attr'][@current_attribute]
-    if not @opts['values_shortcuts'].nil? and @opts['values_shortcuts'].has_key? @current_attribute and @opts['values_shortcuts'][@current_attribute].has_key? value then
-      @tokens['attr'][@current_attribute] = @opts['values_shortcuts'][@current_attribute][value]
+    if not @config['values_shortcuts'].nil? and @config['values_shortcuts'].has_key? @current_attribute and @config['values_shortcuts'][@current_attribute].has_key? value then
+      @tokens['attr'][@current_attribute] = @config['values_shortcuts'][@current_attribute][value]
     end
   end
 
   def tags_shortcuts()
-    if not @opts['tags_shortcuts'].nil? and @opts['tags_shortcuts'].has_key? @tokens['tag'] then
-      @tokens['attr'].merge!(@opts['tags_shortcuts'][@tokens['tag']]['attributes'])
-      @tokens['tag'] = @opts['tags_shortcuts'][@tokens['tag']]['tag']
+    if not @config['tags_shortcuts'].nil? and @config['tags_shortcuts'].has_key? @tokens['tag'] then
+      @tokens['attr'].merge!(@config['tags_shortcuts'][@tokens['tag']]['attributes'])
+      @tokens['tag'] = @config['tags_shortcuts'][@tokens['tag']]['tag']
     end
   end
 
@@ -599,11 +610,11 @@ class JSV
   end
 
   def optmize()
-    if @opts['optmizations'].include? 'delete_comments' then
+    if @config['optmizations'].include? 'delete_comments' then
       self.optz_delete_comments
     end
 
-    if @opts['optmizations'].include? 'shrink_blocks' then
+    if @config['optmizations'].include? 'shrink_blocks' then
       self.optz_shrink_blocks
     end
   end
