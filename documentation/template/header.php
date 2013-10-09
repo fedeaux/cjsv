@@ -14,6 +14,6 @@
     <script src="<?php echo config('base_url') ?>plugins/syntax_highlighter/scripts/shCore.js"></script>
     <script src="<?php echo config('base_url') ?>plugins/syntax_highlighter/scripts/shAutoloader.js"></script>
 
-    <title> Frameworker </title>
+    <title> CJSV </title>
   </head>
   <body class="theme">
