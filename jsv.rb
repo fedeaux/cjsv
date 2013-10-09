@@ -27,7 +27,7 @@ class JSV
       'attributes_shorcuts' => {},
       'tags_shorcuts' => {},
       'optmizations' => ['delete_comments', 'shrink_blocks'],
-      'object_name' => 'Views'
+      'object_name' => 'View'
     }
 
     OptionParser.new do |opts|

@@ -1,6 +1,7 @@
 <h1> CJSV </h1>
 
 <p class="explanation"> <b>C</b>offee/<b>J</b>ava<b>s</b>cript <b>V</b>iew - An html5 template engine. </p>
+<p class="explanation"> CJSV is to HTML5 as SASS is to CSS. </p>
 
 
 <h2> Features </h2>
@@ -11,9 +12,9 @@
     </pre>
        will become
       <pre class="brush: ruby">
-        _outstream = "<a href='"+link+"' id="header" class="link small">
+        <a href="+link+" id="header" class="link small">
           Follow the "+name+"
-        </a>"
+        </a>
       </pre>
   </li>
   
@@ -35,7 +36,10 @@
       </pre>
   </li>
 
-  <li> Use @ to create a CoffeeScript line, and ## to comment </li>
+  <li>
+    Use @ to create a CoffeeScript line, and ## to comment
+  </li>
+
   <li> @ +load will call a view!
     <pre class="brush: sass">
       @ +load menu.sub_item element
@@ -45,15 +49,21 @@
       _outstream += Views.menu.sub_item element
     </pre>
   </li>
+
   <li> Transforms a directory hierarchy in an object hierarchy.
     <div>
       <code>cjsv/menu/main.cjsv</code> will be acessible via <code>View.menu.main()</code>
     </div>
   </li>
+
+  <li>
+    Use \+ to output a literal plus sign (No CoffeeScript interpolation).
+  </li>
+
 </ol>
 
-
-<h2> These input files </h2>
+<h2> Example </h2>
+<h3> These input files </h3>
 <code> cjsv/menu/main.cjsv </code>
 <pre class="brush: sass">
 #main
@@ -77,7 +87,7 @@
   a[href=+element.href+] = +element.name+
 </pre>
 
-<h2> Will generate </h2>
+<h3> Will generate </h3>
 
 <pre class="brush: ruby">
 @Views =
@@ -107,4 +117,10 @@
                        &lt;/a&gt;
                      &lt;/div&gt;&quot;
       return _outstream
+</pre>
+
+<h3> So you can make </h3>
+
+<pre class="brush: ruby">
+  $('#menu').html View.menu.main()
 </pre>
