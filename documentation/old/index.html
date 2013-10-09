@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <link rel="stylesheet" href="theme.css" type="text/css" />
+    <title> JSV </title>
+  </head>
+  <body class="theme">
+    <article>
+      <h1> JSV </h1>
+
+      <p class="explanation"> Javascript View - A CoffeeScript template engine </p>
+
+      <div class="compilation">
+        <div class="cjsv_code">
+          <p class="code"> cjsv/menu/main.cjsv </p>
+          <pre>
+#main
+  .menu_item
+    a[href=http://www.google.com] = google
+
+          </pre>
+          <p class="code"> cjsv/menu/sub.cjsv </p>
+          <pre>
+(elements)
+#sub_menu
+  @ for element in elements
+    @ +load menu.sub_item element
+          </pre>
+          <p class="code"> cjsv/menu/sub_item.cjsv </p>
+          <pre>
+(element)
+.sub_menu_item
+  a[href=+element.href+] = +element.name+
+          </pre>
+        </div>
+
+        <div class="coffeescript_code">
+          <pre>
+@Views =
+  menu :
+    main : () -&gt;
+      _outstream = &quot;
+                     &lt;div id=&quot;main&quot;&gt;
+                       &lt;div class=&quot;menu_item&quot;&gt;
+                         &lt;a href=&quot;http://www.google.com&quot;&gt; google
+                         &lt;/a&gt;
+                       &lt;/div&gt;
+                     &lt;/div&gt;&quot;
+      return _outstream
+    sub : (elements) -&gt;
+      _outstream = &quot;
+                     &lt;div id=&quot;sub_menu&quot;&gt;&quot;
+      for element in elements
+        _outstream += Views.menu.sub_item element
+      _outstream += &quot;&lt;/div&gt;&quot;
+      return _outstream
+    sub_item : (element) -&gt;
+      _outstream = &quot;
+                     &lt;div class=&quot;sub_menu_item&quot;&gt;
+                       &lt;a href=&quot;&quot;+element.href+&quot;&quot;&gt; &quot;+element.name+&quot;
+                       &lt;/a&gt;
+                     &lt;/div&gt;&quot;
+      return _outstream
+          </pre>
+        </div>
+      </div>
+      
+    </article>
+  </body>
+</html>

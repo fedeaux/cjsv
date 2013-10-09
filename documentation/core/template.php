@@ -1,0 +1,39 @@
+<?php
+
+class Template {
+  function show_page($page) {
+    include('template/header.php');
+    include('template/menu.php');
+    include($page);
+    include('template/footer.php');
+  }
+
+  function get_page_hierachy() {
+    return $this->_get_page_hierarchy(config('pages_dir'));
+  }
+
+  function _get_page_hierarchy($base) {
+    $dir_iter = new DirectoryIterator($base);
+    $hierarchy = array();
+
+    foreach($dir_iter as $file) {
+      $file_name = $file->getFilename();
+
+      if(!$file->isDot() and $file_name != 'special' and
+         substr($file_name, 0, 1) != '.' and
+         substr($file_name, 0, 1) != '#' and
+         substr($file_name, -1) != '~') {
+
+        if($file->isDir()) {
+          $hierarchy[$file_name] = $this->_get_page_hierarchy($base.$file_name.'/');
+        } else {
+          $hierarchy[$file_name] = $file_name;
+        }
+      }
+    }
+    
+    return $hierarchy;
+  }
+}
+
+?>

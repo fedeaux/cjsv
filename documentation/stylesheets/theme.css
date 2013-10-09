@@ -1,0 +1,81 @@
+/* line 8, ../sass/theme.sass */
+body {
+  font-family: Helvetica;
+  height: 100%;
+  background-color: #ddddee;
+  color: #1b1b36;
+}
+
+/* line 14, ../sass/theme.sass */
+a {
+  color: #b78b00;
+  text-decoration: none;
+}
+
+/* line 18, ../sass/theme.sass */
+a:hover {
+  color: #eab200;
+  text-decoration: underline;
+}
+
+/* line 22, ../sass/theme.sass */
+#menu {
+  position: fixed;
+  left: 0;
+  top: 0;
+  width: 240px;
+  height: 100%;
+  border-right: thin #7777bb solid;
+  background-color: #aaaad4;
+  overflow-y: auto;
+  padding-top: 3em;
+}
+/* line 33, ../sass/theme.sass */
+#menu ul {
+  list-style: none;
+  list-indent: 0;
+  padding-left: 1em;
+}
+/* line 38, ../sass/theme.sass */
+#menu ul li {
+  display: block;
+}
+/* line 41, ../sass/theme.sass */
+#menu ul li.sub_menu_title {
+  padding-top: 0.6em;
+}
+/* line 44, ../sass/theme.sass */
+#menu ul li a {
+  display: block;
+}
+
+/* line 47, ../sass/theme.sass */
+#content {
+  margin-left: 240px;
+  padding: 1em;
+  max-width: 960px;
+}
+
+/* line 52, ../sass/theme.sass */
+#footer {
+  background-color: #fffaea;
+  font-size: small;
+  padding: 0.5em;
+  text-align: center;
+}
+
+/* line 58, ../sass/theme.sass */
+h1 {
+  margin: 0;
+}
+
+/* line 61, ../sass/theme.sass */
+code {
+  font-size: 1.2em;
+}
+
+/* line 64, ../sass/theme.sass */
+li {
+  line-height: 1.2em;
+  padding-top: 0.2em;
+}

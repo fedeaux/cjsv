@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <link rel="stylesheet" href="theme.css" type="text/css" />
+    <title> Cohsa </title>
+  </head>
+  <body class="theme">
+    <article>
+      <h1> Cohsa </h1>
+
+      <p class="explanation"> A single-page html+coffee+sass+jsv framework to be used with Phonegap and Node Webkit </p>
+
+      <h2> 1. Install CJSV. </h2>
+      <p>  clone https://github.com/ph-everywhere/cjsv to any directory you like </p>
+
+      <h2> 2. Install CoffeeScript and Compass </h2>
+
+      <h2> 3. Install Cohsa. </h2>
+      <p> clone https://github.com/ph-everywhere/cohsa to any directory you like </p>
+
+      <h2> 4. Set up environment </h2>
+
+      <p> Add these lines to your .bashrc or similar. </p>
+
+      <div class="code">
+        <p> alias c_jw='ruby your/path/to/jsv/jsv.rb --input_dir application/views/cjsv/ --output_dir application/views/' </p>
+        <p> alias c_csw='coffee -wc -o js/ .' </p>
+        <p> alias cw='compass watch .' </p>
+        <p> alias cohsa='ruby your/path/to/cohsa/tools/tools.rb' </p>
+      </div>
+
+      <h2> 5. Create your project </h2>
+      <p class="explanation"> Cohsa is independent of Phonegap and Node Webkit. If you are using phonegap, this creation should be on www/ directory. </p>
+
+      <p><span class="code"> cohsa create path/to/name_your_project </span></p>
+
+      <p> Open three terminals (Or a terminal that allows screen splashing, like Terminator) on the just created project folder, and run the first three previously set aliases. On this step you will probably get a lot of ruby dependency related problems. I'm counting on you to solve them! </p>
+
+      <p> Point you browser to index.html and you should see a nice welcome message. </p>
+
+      <h2> 6. Further Reading </h2>
+
+      <h3> Cohsa Concepts </h3>
+      <a class="line_link" href="cohsa_tools.html"> Cohsa Tools </a>
+      <a class="line_link" href="cohsa_mvc.html"> Cohsa MVC </a>
+      <a class="line_link" href="cohsa_config.html"> Cohsa Config </a>
+
+      <h3> Cohsa Core </h3>
+      <a class="line_link" href="cohsa_core_content.html"> content.coffee </a>
+      <a class="line_link" href="cohsa_core_dependency.html"> dependency.coffee </a>
+      <a class="line_link" href="cohsa_core_navigation.html"> navigation.coffee </a>
+      <a class="line_link" href="cohsa_core_router.html"> router.coffee </a>
+      <a class="line_link" href="cohsa_core_server.html"> server.coffee </a>
+
+      <h3> Cohsa Libraries </h3>
+      <a class="line_link" href="cohsa_libraries_counter.html"> counter.coffee </a>
+      <a class="line_link" href="cohsa_libraries_database.html"> database.coffee </a>
+      <a class="line_link" href="cohsa_libraries_facebook_php.html"> facebook_php.coffee </a>
+      <a class="line_link" href="cohsa_libraries_form.html"> form.coffee </a>
+      <a class="line_link" href="cohsa_libraries_image_precacher.html"> image_precacher.coffee </a>
+      <a class="line_link" href="cohsa_libraries_mouse.html"> mouse.coffee </a>
+      <a class="line_link" href="cohsa_libraries_popup.html"> popup.coffee </a>
+      <a class="line_link" href="cohsa_libraries_reloader.html"> reloader.coffee </a>
+      <a class="line_link" href="cohsa_libraries_replacer.html"> replacer.coffee </a>
+      <a class="line_link" href="cohsa_libraries_server.html"> server.coffee </a>
+      <a class="line_link" href="cohsa_libraries_util.html"> util.coffee </a>
+      <a class="line_link" href="cohsa_libraries_validator.html"> validator.coffee </a>
+      
+    </article>
+  </body>
+</html>

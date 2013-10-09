@@ -1,0 +1,66 @@
+$base: #eee
+$highlight: #edf5ff
+
+$text: darken($base, 74%)
+$highlight-text: darken($highlight, 60%)
+$higherlight-text: darken($highlight, 50%)
+
+body
+  font-family: Helvetica
+  height: 100%
+  background-color: $base
+  color: $text
+
+a
+  color: $highlight-text
+  text-decoration: none
+
+a:hover
+  color: $higherlight-text
+  text-decoration: underline
+
+#menu
+  position: fixed
+  left: 0
+  top: 0
+  width: 240px
+  height: 100%
+  border-right: thin darken($base, 30%) solid
+  background-color: darken($base, 15%)
+  overflow-y: auto
+  padding-top: 3em
+
+  ul
+    list-style: none
+    list-indent: 0
+    padding-left: 1em
+
+    li
+      display: block
+
+      &.sub_menu_title
+        padding-top: .6em
+
+      a
+        display: block
+
+#content
+  margin-left: 240px
+  padding: 1em
+  max-width: 960px
+
+#footer
+  background-color: $highlight
+  font-size: small
+  padding: .5em
+  text-align: center
+
+h1
+  margin: 0  
+
+code
+  font-size: 1.2em
+
+li
+  line-height: 1.2em
+  padding-top: .2em

@@ -20,7 +20,7 @@ class JSV
       'debug' => false,
       'input_dir' => 'cjsv/',
       'output_dir' => 'coffee/',
-      'output_filename' => 'jsv.coffee',
+      'output_filename' => 'cjsv.coffee',
       'helpers_filename' => File.dirname(__FILE__)+'/helpers.coffee',
       'output_generated_file' => false,
       'watch_directories' => true,
@@ -35,7 +35,7 @@ class JSV
         @config['input_dir'] = v
       end
 
-      opts.on("--output_dir [OUTPUT_DIR]", :text, "Root folder to watch") do |v|
+      opts.on("--output_dir [OUTPUT_DIR]", :text, "Root folder to output") do |v|
         @config['output_dir'] = v
       end
     end.parse!
@@ -325,8 +325,7 @@ class JSV
         @indentation['aux_general'] = self.line_identation line
 
         if(self.is_argline? line ) then #Arguments Line
-          @func_args = line.strip.gsub('(', '').gsub(')', '')
-            .gsub(' ', '').gsub(',', ', ')
+          @func_args = line.strip.gsub('(', '').gsub(')', '').gsub(' ', '').gsub(',', ', ')
 
         elsif self.is_js_block_end line then
           @in_js_block = false

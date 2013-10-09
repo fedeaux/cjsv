@@ -1,0 +1,30 @@
+body {
+    background-color: gray;
+}
+
+article {
+    background-color: white;
+    color: #333;
+    font-family: Helvetica;
+    width: 640px;
+    margin: 20px auto;
+    outline: thin black solid;
+    padding: 20px 20px;
+}
+
+.code {
+    font-family: Monospace;
+}
+
+div.code {
+    border: thin dashed gray;
+}
+
+div.code p {
+    margin: 0;
+}
+
+a.line_link {
+    display: block;
+    margin-top: 0.3em;
+}
